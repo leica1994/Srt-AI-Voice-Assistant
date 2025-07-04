@@ -1,4 +1,0 @@
-gradio>=4.44.1
-soundfile
-colorlog
-soxr
