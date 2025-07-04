@@ -37,6 +37,7 @@ import Sava_Utils.tts_projects.bv2
 import Sava_Utils.tts_projects.gsv
 import Sava_Utils.tts_projects.mstts
 import Sava_Utils.tts_projects.custom
+import Sava_Utils.tts_projects.indextts
 from Sava_Utils.subtitle_translation import Translation_module
 from Sava_Utils.polyphone import Polyphone
 
@@ -44,11 +45,12 @@ BV2 = Sava_Utils.tts_projects.bv2.BV2(Sava_Utils.config)
 GSV = Sava_Utils.tts_projects.gsv.GSV(Sava_Utils.config)
 MSTTS = Sava_Utils.tts_projects.mstts.MSTTS(Sava_Utils.config)
 CUSTOM = Sava_Utils.tts_projects.custom.Custom(Sava_Utils.config)
+INDEXTTS = Sava_Utils.tts_projects.indextts.IndexTTS(Sava_Utils.config)
 TRANSLATION_MODULE = Translation_module(Sava_Utils.config)
 POLYPHONE = Polyphone(Sava_Utils.config)
-Projet_dict = {"bv2": BV2, "gsv": GSV, "mstts": MSTTS, "custom": CUSTOM}
+Projet_dict = {"bv2": BV2, "gsv": GSV, "mstts": MSTTS, "indextts": INDEXTTS, "custom": CUSTOM}
 componments = {
-    1: [GSV, BV2, MSTTS, CUSTOM],
+    1: [GSV, BV2, MSTTS, INDEXTTS, CUSTOM],
     2: [TRANSLATION_MODULE, POLYPHONE],
     3: [],
 }
@@ -427,7 +429,7 @@ if __name__ == "__main__":
                         TTS_ARGS=[]
                         for i in componments[1]:
                             TTS_ARGS.append(i.getUI())
-                    GSV_ARGS,BV2_ARGS,MSTTS_ARGS,CUSTOM_ARGS=TTS_ARGS
+                    GSV_ARGS,BV2_ARGS,MSTTS_ARGS,INDEXTTS_ARGS,CUSTOM_ARGS=TTS_ARGS
                     with gr.Column():
                         with gr.Accordion(i18n('Other Parameters'), open=True):
                             fps = gr.Number(label=i18n('Frame rate of Adobe Premiere project, only applicable to csv files exported from Pr'), value=30, visible=True, interactive=True, minimum=1)
@@ -484,12 +486,15 @@ if __name__ == "__main__":
                                     gsvregenbtn.click(remake, inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt, *GSV_ARGS, STATE], outputs=[audio_player, page_slider] + edit_rows[-6:])
                                     msttsregenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=False)
                                     msttsregenbtn.click(remake, inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt, *MSTTS_ARGS, STATE], outputs=[audio_player, page_slider] + edit_rows[-6:])
+                                    indexttsregenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=False)
+                                    indexttsregenbtn.click(remake, inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt, *INDEXTTS_ARGS, STATE], outputs=[audio_player, page_slider] + edit_rows[-6:])
                                     customregenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=False)
                                     customregenbtn.click(remake, inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt, CUSTOM.choose_custom_api, STATE], outputs=[audio_player, page_slider] + edit_rows[-6:])
                                     edit_rows.append(bv2regenbtn)
                                     edit_rows.append(gsvregenbtn)
                                     edit_rows.append(msttsregenbtn)
-                                    edit_rows.append(customregenbtn)                                    
+                                    edit_rows.append(indexttsregenbtn)
+                                    edit_rows.append(customregenbtn)
                         workrefbtn.click(getworklist, inputs=[], outputs=[worklist])
                         export_btn.click(lambda file_list, x: ([i.name for i in file_list] if file_list else []) + ([o] if (o:=x.export()) else []), inputs=[input_file, STATE], outputs=[input_file])
                         with gr.Row(equal_height=True):
@@ -513,11 +518,14 @@ if __name__ == "__main__":
                             edit_rows.append(all_regen_btn_gsv)
                             all_regen_btn_mstts = gr.Button(value=i18n('Continue Generation'), variant="primary", visible=False, interactive=True, min_width=50)
                             edit_rows.append(all_regen_btn_mstts)
+                            all_regen_btn_indextts = gr.Button(value=i18n('Continue Generation'), variant="primary", visible=False, interactive=True, min_width=50)
+                            edit_rows.append(all_regen_btn_indextts)
                             all_regen_btn_custom = gr.Button(value=i18n('Continue Generation'), variant="primary", visible=False, interactive=True, min_width=50)
                             edit_rows.append(all_regen_btn_custom)
                             all_regen_btn_bv2.click(lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args, remake=True), inputs=[INTERRUPT_EVENT, page_slider, workers, *BV2_ARGS, STATE], outputs=edit_rows)
                             all_regen_btn_gsv.click(lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args, remake=True), inputs=[INTERRUPT_EVENT, page_slider, workers, *GSV_ARGS, STATE], outputs=edit_rows)
                             all_regen_btn_mstts.click(lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args, remake=True), inputs=[INTERRUPT_EVENT, page_slider, workers, *MSTTS_ARGS, STATE], outputs=edit_rows)
+                            all_regen_btn_indextts.click(lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args, remake=True), inputs=[INTERRUPT_EVENT, page_slider, workers, *INDEXTTS_ARGS, STATE], outputs=edit_rows)
                             all_regen_btn_custom.click(lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args, remake=True), inputs=[INTERRUPT_EVENT, page_slider, workers, CUSTOM.choose_custom_api, STATE], outputs=edit_rows)
 
                         page_slider.change(show_page, inputs=[page_slider, STATE], outputs=edit_rows)
@@ -540,7 +548,7 @@ if __name__ == "__main__":
                     with gr.Row(equal_height=True):
                         speaker_list = gr.Dropdown(label=i18n('Select/Create Speaker'), value="None", choices=refspklist(), allow_custom_value=not Sava_Utils.config.server_mode, scale=4)
                         # speaker_list.change(set_default_speaker,inputs=[speaker_list,STATE])
-                        select_spk_projet = gr.Dropdown(choices=['bv2', 'gsv', 'mstts', 'custom'], value='gsv', interactive=True, label=i18n('TTS Project'))
+                        select_spk_projet = gr.Dropdown(choices=['bv2', 'gsv', 'mstts', 'indextts', 'custom'], value='gsv', interactive=True, label=i18n('TTS Project'))
                         refresh_spk_list_btn = gr.Button(value="🔄️", min_width=60, scale=0)
                         refresh_spk_list_btn.click(getspklist, inputs=[], outputs=[speaker_list])
                         apply_btn = gr.Button(value="✅", min_width=60, scale=0)
@@ -552,10 +560,12 @@ if __name__ == "__main__":
                         save_spk_btn_gsv.click(lambda *args: save_spk(*args, project="gsv"), inputs=[speaker_list, *GSV_ARGS], outputs=[speaker_list])
                         save_spk_btn_mstts = gr.Button(value="💾", min_width=60, scale=0, visible=False)
                         save_spk_btn_mstts.click(lambda *args: save_spk(*args, project="mstts"), inputs=[speaker_list, *MSTTS_ARGS], outputs=[speaker_list])
+                        save_spk_btn_indextts = gr.Button(value="💾", min_width=60, scale=0, visible=False)
+                        save_spk_btn_indextts.click(lambda *args: save_spk(*args, project="indextts"), inputs=[speaker_list, *INDEXTTS_ARGS], outputs=[speaker_list])
                         save_spk_btn_custom = gr.Button(value="💾", min_width=60, scale=0, visible=False)
                         save_spk_btn_custom.click(lambda *args: save_spk(*args, project="custom"), inputs=[speaker_list, CUSTOM.choose_custom_api], outputs=[speaker_list])
 
-                        select_spk_projet.change(switch_spk_proj, inputs=[select_spk_projet], outputs=[save_spk_btn_bv2, save_spk_btn_gsv, save_spk_btn_mstts, save_spk_btn_custom])
+                        select_spk_projet.change(switch_spk_proj, inputs=[select_spk_projet], outputs=[save_spk_btn_bv2, save_spk_btn_gsv, save_spk_btn_mstts, save_spk_btn_indextts, save_spk_btn_custom])
 
                         del_spk_list_btn = gr.Button(value="🗑️", min_width=60, scale=0)
                         del_spk_list_btn.click(del_spk, inputs=[speaker_list], outputs=[speaker_list])
@@ -592,6 +602,7 @@ if __name__ == "__main__":
         BV2.gen_btn1.click(lambda process=gr.Progress(track_tqdm=True),*args: generate_preprocess(*args, project="bv2"), inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *BV2_ARGS], outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
         GSV.gen_btn2.click(lambda process=gr.Progress(track_tqdm=True),*args: generate_preprocess(*args, project="gsv"), inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *GSV_ARGS], outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
         MSTTS.gen_btn3.click(lambda process=gr.Progress(track_tqdm=True),*args: generate_preprocess(*args, project="mstts"), inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *MSTTS_ARGS], outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
+        INDEXTTS.gen_btn5.click(lambda process=gr.Progress(track_tqdm=True),*args: generate_preprocess(*args, project="indextts"), inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *INDEXTTS_ARGS], outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
         CUSTOM.gen_btn4.click(lambda process=gr.Progress(track_tqdm=True),*args: generate_preprocess(*args, project="custom"), inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, CUSTOM.choose_custom_api], outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
         # Stability is not ensured due to the mechanism of gradio.
 

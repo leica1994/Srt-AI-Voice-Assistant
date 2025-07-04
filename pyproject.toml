@@ -1,0 +1,12 @@
+[project]
+name = "srt-ai-voice-assistant"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "colorlog>=6.9.0",
+    "gradio>=4.44.1",
+    "soundfile>=0.13.1",
+    "soxr>=0.5.0.post1",
+]

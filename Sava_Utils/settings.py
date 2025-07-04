@@ -52,7 +52,7 @@ class Settings:
     def __init__(
         self,
         language: str = "Auto",
-        server_port: int = 0,
+        server_port: int = 8888,
         LAN_access: bool = False,
         overwrite_workspace: bool = False,
         clear_tmp: bool = False,
