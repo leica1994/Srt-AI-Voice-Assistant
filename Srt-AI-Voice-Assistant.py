@@ -436,6 +436,24 @@ if __name__ == "__main__":
                             workers = gr.Number(label=i18n('Number of threads for sending requests'), value=2, visible=True, interactive=True, minimum=1)
                             offset = gr.Slider(minimum=-6, maximum=6, value=0, step=0.1, label=i18n('Voice time offset (seconds)'))
                         input_file = gr.File(label=i18n('Upload file (Batch mode only supports one speaker at a time)'), file_types=['.csv', '.srt', '.txt'], file_count='multiple')
+
+                        # 本地视频地址输入组件 - 优化样式
+                        with gr.Group():
+                            gr.Markdown("### 视频文件路径")
+                            with gr.Row():
+                                local_video_path_input = gr.Textbox(
+                                    label="",
+                                    placeholder="🎬 输入本地视频文件路径，例如：C:/Videos/video.mp4",
+                                    scale=4,
+                                    container=False,
+                                    show_label=False
+                                )
+                                load_local_video_path_btn = gr.Button(
+                                    value="加载文件",
+                                    scale=1,
+                                    variant="primary"
+                                )
+
                         gen_textbox_output_text = gr.Textbox(label=i18n('Output Info'), interactive=False)
                         audio_output = gr.Audio(label="Output Audio")
                         stop_btn = gr.Button(value=i18n('Stop'),variant="stop")
@@ -447,6 +465,80 @@ if __name__ == "__main__":
                                 start_hiyoriui_btn.click(start_hiyoriui, outputs=[gen_textbox_output_text])
                                 start_gsv_btn.click(start_gsv, outputs=[gen_textbox_output_text])
                         input_file.change(file_show, inputs=[input_file], outputs=[textbox_intput_text])
+
+                        # 本地视频路径处理函数
+                        def handle_local_video_path_load(video_path):
+                            """处理本地视频路径加载"""
+                            if not video_path or video_path.strip() == "":
+                                return gr.update(value="⚠️ **请输入视频文件路径**\n\n💡 示例路径：`C:/Videos/movie.mp4`")
+
+                            # 清理路径（移除引号和多余空格）
+                            video_path = video_path.strip().strip('"').strip("'")
+
+                            # 检查文件是否存在
+                            if not os.path.exists(video_path):
+                                return gr.update(value=f"❌ **文件不存在**\n\n📂 检查路径：`{video_path}`\n\n💡 请确认文件路径是否正确")
+
+                            # 检查是否是文件（不是目录）
+                            if not os.path.isfile(video_path):
+                                return gr.update(value=f"❌ **这是一个目录，不是文件**\n\n📂 路径：`{video_path}`\n\n💡 请选择具体的视频文件")
+
+                            # 检查文件格式
+                            file_extension = os.path.splitext(video_path)[1].lower()
+                            video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m2ts', '.mts', '.m4v', '.3gp', '.3g2', '.asf', '.rm', '.rmvb', '.vob', '.mpg', '.mpeg', '.m1v', '.m2v', '.ogv', '.ogg']
+
+                            if not any(video_path.lower().endswith(ext) for ext in video_extensions):
+                                supported_formats = "MP4, AVI, MKV, MOV, WMV, WebM, TS, 3GP, RMVB, MPG"
+                                return gr.update(value=f"❌ **不支持的视频格式**\n\n🎞️ 当前格式：`{file_extension.upper()}`\n\n✅ 支持格式：{supported_formats}")
+
+                            # 获取文件信息
+                            try:
+                                file_size = os.path.getsize(video_path)
+                                file_size_mb = file_size / (1024 * 1024)
+                                file_name = os.path.basename(video_path)
+
+                                # 检查文件权限
+                                if not os.access(video_path, os.R_OK):
+                                    return gr.update(value=f"❌ **文件权限不足**\n\n🔒 无法读取文件：`{video_path}`\n\n💡 请检查文件权限或以管理员身份运行")
+
+                                # 格式兼容性检查
+                                web_compatible = ['.mp4', '.webm', '.ogv']
+                                is_web_compatible = file_extension in web_compatible
+
+                                if is_web_compatible:
+                                    compatibility_info = f"🌐 **{file_extension.upper()}格式** - 浏览器兼容性优秀"
+                                else:
+                                    compatibility_info = f"🎮 **{file_extension.upper()}格式** - 建议使用外部播放器"
+
+                                # 创建美观的反馈信息
+                                feedback_message = f"""
+🎉 **视频文件验证成功**
+
+📋 **文件信息**
+• 📁 文件名: `{file_name}`
+• 📏 文件大小: **{file_size_mb:.1f} MB**
+• 🎞️ 视频格式: **{file_extension.upper()}**
+• {compatibility_info}
+
+📂 **完整路径**
+```
+{video_path}
+```
+
+✨ 文件已准备就绪，可以进行后续处理！
+                                """.strip()
+
+                                return gr.update(value=feedback_message)
+
+                            except Exception as e:
+                                return gr.update(value=f"❌ **读取文件信息失败**\n\n🔧 错误详情：`{str(e)}`\n\n💡 请检查文件是否被其他程序占用或文件是否损坏")
+
+                        # 绑定本地视频路径加载事件
+                        load_local_video_path_btn.click(
+                            handle_local_video_path_load,
+                            inputs=[local_video_path_input],
+                            outputs=[gen_textbox_output_text]
+                        )
 
                 with gr.Accordion(label=i18n('Editing area *Note: DO NOT clear temporary files while using this function.'), open=True):
                     with gr.Column():
