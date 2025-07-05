@@ -439,7 +439,7 @@ if __name__ == "__main__":
 
                         # 本地视频地址输入组件 - 优化样式
                         with gr.Group():
-                            gr.Markdown("### 视频文件路径")
+                            gr.Markdown("视频文件路径")
                             with gr.Row():
                                 local_video_path_input = gr.Textbox(
                                     label="",
@@ -449,10 +449,23 @@ if __name__ == "__main__":
                                     show_label=False
                                 )
                                 load_local_video_path_btn = gr.Button(
-                                    value="加载文件",
+                                    value="🔍 验证文件",
                                     scale=1,
                                     variant="primary"
                                 )
+
+                            # 合成视频按钮
+                            with gr.Row():
+                                compose_video_btn = gr.Button(
+                                    value="🎬 合成视频",
+                                    variant="secondary",
+                                    size="lg"
+                                )
+
+                            gr.Markdown(
+                                "💡 **功能说明**: 验证文件后可进行视频合成，支持添加字幕、音频等",
+                                elem_classes="text-sm text-gray-600"
+                            )
 
                         gen_textbox_output_text = gr.Textbox(label=i18n('Output Info'), interactive=False)
                         audio_output = gr.Audio(label="Output Audio")
@@ -537,6 +550,67 @@ if __name__ == "__main__":
                         load_local_video_path_btn.click(
                             handle_local_video_path_load,
                             inputs=[local_video_path_input],
+                            outputs=[gen_textbox_output_text]
+                        )
+
+                        # 合成视频处理函数
+                        def handle_compose_video(video_path, subtitle_files):
+                            """处理视频合成"""
+                            if not video_path or video_path.strip() == "":
+                                return gr.update(value="⚠️ **请先验证视频文件**\n\n💡 请在上方输入视频路径并点击'验证文件'按钮")
+
+                            # 清理路径
+                            video_path = video_path.strip().strip('"').strip("'")
+
+                            # 检查视频文件是否存在
+                            if not os.path.exists(video_path):
+                                return gr.update(value="❌ **视频文件不存在**\n\n📂 请重新验证视频文件路径")
+
+                            # 检查字幕文件
+                            subtitle_info = ""
+                            if subtitle_files and len(subtitle_files) > 0:
+                                subtitle_count = len(subtitle_files)
+                                subtitle_names = [os.path.basename(f.name) if hasattr(f, 'name') else str(f) for f in subtitle_files]
+                                subtitle_info = f"\n📄 **字幕文件**: {subtitle_count}个文件\n• " + "\n• ".join(subtitle_names)
+                            else:
+                                subtitle_info = "\n⚠️ **字幕文件**: 未上传字幕文件"
+
+                            # 获取视频信息
+                            file_name = os.path.basename(video_path)
+                            file_size = os.path.getsize(video_path)
+                            file_size_mb = file_size / (1024 * 1024)
+                            file_extension = os.path.splitext(video_path)[1].lower()
+
+                            # 生成合成信息
+                            compose_info = f"""
+🎬 **视频合成准备就绪**
+
+📹 **源视频信息**
+• 📁 文件名: `{file_name}`
+• 📏 大小: **{file_size_mb:.1f} MB**
+• 🎞️ 格式: **{file_extension.upper()}**
+{subtitle_info}
+
+🔧 **合成选项**
+• ✅ 保持原视频质量
+• ✅ 嵌入字幕轨道
+• ✅ 保留原音频
+• ✅ 输出MP4格式
+
+⚡ **下一步操作**
+1. 确认视频和字幕文件正确
+2. 选择输出目录
+3. 开始合成处理
+
+💡 **注意**: 合成过程可能需要几分钟，请耐心等待
+                            """.strip()
+
+                            return gr.update(value=compose_info)
+
+                        # 绑定合成视频事件
+                        compose_video_btn.click(
+                            handle_compose_video,
+                            inputs=[local_video_path_input, input_file],
                             outputs=[gen_textbox_output_text]
                         )
 

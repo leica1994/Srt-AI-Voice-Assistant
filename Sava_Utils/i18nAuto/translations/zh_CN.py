@@ -43,7 +43,6 @@ i18n_dict = {
     "Apply to current Workspace": "应用到当前字幕",
     "Create Multi-Speaker Dubbing Project": "创建多角色项目",
     "Custom API": "自定义API",
-    "Other Parameters": "其他参数",
     "Frame rate of Adobe Premiere project, only applicable to csv files exported from Pr": "Pr项目帧速率,仅适用于Pr导出的csv文件",
     "API Launcher": "启动API服务",
     "Number of threads for sending requests": "请求线程数",
