@@ -1,12 +1,25 @@
 [project]
 name = "srt-ai-voice-assistant"
 version = "0.1.0"
-description = "Add your description here"
+description = "srt to voice assistant"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "colorlog>=6.9.0",
+    "colorlog==6.9.0",
+    "demucs>=4.0.1",
+    "ffmpeg-python>=0.2.0",
     "gradio>=4.44.1",
+    "numpy<2.0",
+    "pytorch-lightning>=2.5.2",
     "soundfile>=0.13.1",
     "soxr>=0.5.0.post1",
+    # 使用直接链接方式确保正确安装CUDA版本
+    "torch @ https://download.pytorch.org/whl/cu121/torch-2.3.0%2Bcu121-cp312-cp312-win_amd64.whl",
+    "torchaudio @ https://download.pytorch.org/whl/cu121/torchaudio-2.3.0%2Bcu121-cp312-cp312-win_amd64.whl",
+    "torchvision @ https://download.pytorch.org/whl/cu121/torchvision-0.18.0%2Bcu121-cp312-cp312-win_amd64.whl",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
