@@ -740,67 +740,208 @@ if __name__ == "__main__":
 
 
                         # 合成视频处理函数
-                        def handle_compose_video(video_path, subtitle_files):
-                            """处理视频合成"""
+                        def handle_compose_video(video_path, subtitle_files, current_state, subtitles_state, audio_data):
+                            """处理视频合成 - 完整检查版本"""
+
+                            # 1. 检查字幕是否上传
+                            if not subtitle_files or len(subtitle_files) == 0:
+                                return gr.update(
+                                    value="❌ **字幕文件检查失败**\n\n📝 **错误**: 未上传字幕文件\n\n💡 **解决方案**: 请在左侧上传 .srt 格式的字幕文件")
+
+                            # 检查字幕文件格式
+                            srt_files = [f for f in subtitle_files if f.name.lower().endswith('.srt')]
+                            if len(srt_files) == 0:
+                                return gr.update(
+                                    value="❌ **字幕文件格式错误**\n\n📝 **错误**: 上传的文件中没有 .srt 格式的字幕文件\n\n💡 **解决方案**: 请上传正确的 .srt 字幕文件")
+
+                            # 2. 检查视频是否加载过
                             if not video_path or video_path.strip() == "":
                                 return gr.update(
-                                    value="⚠️ **请先验证视频文件**\n\n💡 请在上方输入视频路径并点击'验证文件'按钮")
+                                    value="❌ **视频文件检查失败**\n\n🎬 **错误**: 未输入视频文件路径\n\n💡 **解决方案**: 请在上方输入视频路径并点击'🚀 加载文件'按钮")
 
                             # 清理路径
                             video_path = video_path.strip().strip('"').strip("'")
 
                             # 检查视频文件是否存在
                             if not os.path.exists(video_path):
-                                return gr.update(value="❌ **视频文件不存在**\n\n📂 请重新验证视频文件路径")
+                                return gr.update(
+                                    value="❌ **视频文件不存在**\n\n🎬 **错误**: 指定的视频文件路径不存在\n\n💡 **解决方案**: 请检查文件路径是否正确，并重新点击'🚀 加载文件'按钮")
 
-                            # 检查字幕文件
-                            subtitle_info = ""
-                            if subtitle_files and len(subtitle_files) > 0:
-                                subtitle_count = len(subtitle_files)
-                                subtitle_names = [os.path.basename(f.name) if hasattr(f, 'name') else str(f) for f in
-                                                  subtitle_files]
-                                subtitle_info = f"\n📄 **字幕文件**: {subtitle_count}个文件\n• " + "\n• ".join(
-                                    subtitle_names)
-                            else:
-                                subtitle_info = "\n⚠️ **字幕文件**: 未上传字幕文件"
+                            # 检查视频是否已经处理过（音频分离）
+                            if not current_state.get("processed", False):
+                                return gr.update(
+                                    value="❌ **视频未处理**\n\n🎬 **错误**: 视频文件未经过音频分离处理\n\n💡 **解决方案**: 请点击'🚀 加载文件'按钮先处理视频文件")
 
-                            # 获取视频信息
-                            file_name = os.path.basename(video_path)
-                            file_size = os.path.getsize(video_path)
-                            file_size_mb = file_size / (1024 * 1024)
-                            file_extension = os.path.splitext(video_path)[1].lower()
+                            # 3. 检查音频是否生成
+                            if subtitles_state is None or len(subtitles_state) == 0:
+                                return gr.update(
+                                    value="❌ **音频生成检查失败**\n\n🎵 **错误**: 未找到字幕数据，音频可能未生成\n\n💡 **解决方案**: 请先在左侧选择TTS服务并点击'生成'按钮生成音频")
 
-                            # 生成合成信息
-                            compose_info = f"""
-🎬 **视频合成准备就绪**
+                            # 检查音频输出
+                            if audio_data is None:
+                                return gr.update(
+                                    value="❌ **音频输出检查失败**\n\n🎵 **错误**: 未检测到生成的音频数据\n\n💡 **解决方案**: 请确保已完成音频生成，并在右侧看到音频播放器")
+
+                            # 检查字幕是否有成功生成的音频
+                            success_count = 0
+                            total_count = len(subtitles_state)
+
+                            for subtitle in subtitles_state:
+                                if hasattr(subtitle, 'is_success') and subtitle.is_success:
+                                    success_count += 1
+
+                            if success_count == 0:
+                                return gr.update(
+                                    value="❌ **音频合成检查失败**\n\n🎵 **错误**: 所有字幕行的音频生成都失败了\n\n💡 **解决方案**: 请检查TTS服务配置，重新生成音频")
+
+                            if success_count < total_count:
+                                failed_count = total_count - success_count
+                                return gr.update(
+                                    value=f"⚠️ **音频合成不完整**\n\n🎵 **警告**: {total_count} 行字幕中有 {failed_count} 行音频生成失败\n\n💡 **建议**: 建议先修复失败的音频生成，或继续合成（将跳过失败的部分）")
+
+                            # 4. 所有检查通过，开始执行合成流程
+                            try:
+                                file_name = os.path.basename(video_path)
+                                file_size = os.path.getsize(video_path)
+                                file_size_mb = file_size / (1024 * 1024)
+                                file_extension = os.path.splitext(video_path)[1].lower()
+
+                                subtitle_names = [os.path.basename(f.name) for f in srt_files]
+
+                                # 显示开始处理的信息
+                                processing_info = f"""
+🚀 **开始视频合成处理**
+
+📋 **检查结果**
+• ✅ 字幕文件: {len(srt_files)} 个 .srt 文件已上传
+• ✅ 视频文件: 已加载并处理完成
+• ✅ 音频生成: {success_count}/{total_count} 行字幕音频生成成功
 
 📹 **源视频信息**
 • 📁 文件名: `{file_name}`
 • 📏 大小: **{file_size_mb:.1f} MB**
 • 🎞️ 格式: **{file_extension.upper()}**
-{subtitle_info}
 
-🔧 **合成选项**
-• ✅ 保持原视频质量
-• ✅ 嵌入字幕轨道
-• ✅ 保留原音频
-• ✅ 输出MP4格式
+⏳ **正在执行合成流程:**
+1. 📝 导出字幕文件...
+2. 🎬 根据字幕调整视频速度...
+3. 🎵 合成变速视频与音频...
 
-⚡ **下一步操作**
-1. 确认视频和字幕文件正确
-2. 选择输出目录
-3. 开始合成处理
+💡 **请稍候，处理中...**
+                                """.strip()
 
-💡 **注意**: 合成过程可能需要几分钟，请耐心等待
-                            """.strip()
+                                # 显示处理中的信息（暂时注释掉yield，因为函数不是生成器）
+                                # yield gr.update(value=processing_info)
 
-                            return gr.update(value=compose_info)
+                                # 步骤1: 导出字幕文件
+                                import tempfile
+                                import shutil
+                                temp_dir = os.path.join(current_path, "SAVAdata", "temp", "video_compose")
+                                os.makedirs(temp_dir, exist_ok=True)
+
+                                # 导出原始字幕（从上传的文件）
+                                original_srt_path = os.path.join(temp_dir, "original.srt")
+                                shutil.copy2(srt_files[0].name, original_srt_path)
+
+                                # 导出新字幕（从生成的音频数据）
+                                new_srt_path = os.path.join(temp_dir, "new.srt")
+                                subtitles_state.export(fp=new_srt_path, open_explorer=False)
+
+                                # 步骤2: 获取无声视频路径
+                                # 从processing_state中获取处理后的视频路径
+                                silent_video_path = None
+                                if "raw_video" in os.environ:
+                                    silent_video_path = os.environ["raw_video"]
+
+                                if not silent_video_path or not os.path.exists(silent_video_path):
+                                    # 如果没有找到无声视频，使用原视频
+                                    silent_video_path = video_path
+
+                                # 步骤3: 调用视频变速处理
+                                from Sava_Utils.video_speed_adjuster import adjust_video_speed_by_subtitles
+
+                                speed_result = adjust_video_speed_by_subtitles(
+                                    video_path=silent_video_path,
+                                    original_srt_path=original_srt_path,
+                                    new_srt_path=new_srt_path,
+                                    output_dir=temp_dir,
+                                    max_workers=4,
+                                    use_gpu=True
+                                )
+
+                                if not speed_result['success']:
+                                    return gr.update(value=f"❌ **视频变速处理失败**\n\n🎬 **错误**: {speed_result['message']}")
+
+                                speed_adjusted_video = speed_result['output_path']
+
+                                # 步骤4: 获取生成的音频文件路径
+                                audio_file_path = os.path.join(current_path, "SAVAdata", "output", f"{subtitles_state.dir}.wav")
+
+                                if not os.path.exists(audio_file_path):
+                                    return gr.update(value="❌ **音频文件不存在**\n\n🎵 **错误**: 找不到生成的音频文件")
+
+                                # 步骤5: 合成变速视频与音频
+                                from Sava_Utils.video_speed_adjuster import merge_video_with_audio
+
+                                output_video_path = os.path.join(current_path, "SAVAdata", "output", f"{subtitles_state.dir}_final.mp4")
+
+                                final_video = merge_video_with_audio(
+                                    video_path=speed_adjusted_video,
+                                    audio_path=audio_file_path,
+                                    output_path=output_video_path,
+                                    use_gpu=True,
+                                    sync_to_audio=True
+                                )
+
+                                # 生成成功信息
+                                success_info = f"""
+✅ **视频合成完成！**
+
+📋 **处理结果**
+• ✅ 字幕导出: 成功
+• ✅ 视频变速: 成功 ({speed_result['segments_processed']}/{speed_result['total_segments']} 片段)
+• ✅ 音视频合成: 成功
+
+📊 **处理统计**
+• 原始时长: {speed_result['original_duration']:.2f}秒
+• 目标时长: {speed_result['target_duration']:.2f}秒
+• 平均变速比: {speed_result['average_speed_ratio']:.2f}x
+• 音频成功率: {success_count/total_count*100:.1f}%
+
+📁 **输出文件**
+• 🎬 最终视频: `{os.path.basename(final_video)}`
+• 📂 保存位置: `SAVAdata/output/`
+
+🎉 **合成成功！**
+您的视频已经成功合成，包含了同步的音频和调整后的播放速度。
+
+💡 **提示**: 可以在输出目录中找到最终的视频文件
+                                """.strip()
+
+                                return gr.update(value=success_info)
+
+                            except Exception as e:
+                                error_info = f"""
+❌ **视频合成失败**
+
+🔧 **错误信息**: {str(e)}
+
+💡 **可能的解决方案:**
+• 检查所有文件是否完整
+• 确认有足够的磁盘空间
+• 重新生成音频后再试
+• 检查视频文件是否损坏
+
+🔄 **建议**: 重新执行整个流程
+                                """.strip()
+
+                                return gr.update(value=error_info)
 
 
                         # 绑定合成视频事件
                         compose_video_btn.click(
                             handle_compose_video,
-                            inputs=[local_video_path_input, input_file],
+                            inputs=[local_video_path_input, input_file, processing_state, STATE, audio_output],
                             outputs=[gen_textbox_output_text]
                         )
 
