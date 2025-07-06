@@ -20,7 +20,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 import json
 
-# import datetime
+import datetime
 import time
 import soundfile as sf
 import concurrent.futures
@@ -59,6 +59,75 @@ componments = {
 
 def custom_api(text):
     raise i18n('You need to load custom API functions!')
+
+
+def export_subtitle_with_new_name(file_list, subtitle_state):
+    """
+    导出字幕文件，基于原字幕文件名生成新的文件名
+
+    Args:
+        file_list: 原始文件列表
+        subtitle_state: 字幕状态对象
+
+    Returns:
+        更新后的文件列表
+    """
+    try:
+        # 获取原始文件列表
+        original_files = [i.name for i in file_list] if file_list else []
+
+        # 导出字幕文件
+        exported_file = subtitle_state.export()
+
+        if exported_file:
+            # 如果有原始字幕文件，基于第一个文件名生成新名称
+            if original_files:
+                original_file = original_files[0]
+                # 获取原文件的目录和基础名称
+                original_dir = os.path.dirname(original_file)
+                original_basename = Sava_Utils.utils.basename_no_ext(original_file)
+
+                new_filename = f"{original_basename}.srt"
+
+                # 如果原文件在output目录外，则放到output目录
+                if "SAVAdata" not in original_dir or "output" not in original_dir:
+                    new_filepath = os.path.join(current_path, "SAVAdata", "output", new_filename)
+                else:
+                    new_filepath = os.path.join(original_dir, new_filename)
+
+                # 如果新文件名与导出文件名不同，则重命名
+                if exported_file != new_filepath:
+                    try:
+                        # 确保目标目录存在
+                        os.makedirs(os.path.dirname(new_filepath), exist_ok=True)
+
+                        # 如果目标文件已存在，添加时间戳
+                        if os.path.exists(new_filepath):
+                            timestamp = datetime.datetime.now().strftime("_%Y%m%d_%H%M%S")
+                            name_part = Sava_Utils.utils.basename_no_ext(new_filepath)
+                            new_filepath = os.path.join(os.path.dirname(new_filepath), f"{name_part}{timestamp}.srt")
+
+                        # 重命名文件
+                        shutil.move(exported_file, new_filepath)
+                        exported_file = new_filepath
+
+                        print(f"✅ 字幕文件已导出: {new_filepath}")
+                        gr.Info(f"字幕文件已导出: {os.path.basename(new_filepath)}")
+
+                    except Exception as e:
+                        print(f"⚠️ 重命名文件失败: {e}")
+                        gr.Warning(f"重命名文件失败，使用默认名称: {os.path.basename(exported_file)}")
+
+            # 返回原始文件列表 + 新导出的文件
+            return original_files + [exported_file]
+        else:
+            # 如果导出失败，返回原始文件列表
+            return original_files
+
+    except Exception as e:
+        print(f"❌ 导出字幕文件失败: {e}")
+        gr.Error(f"导出字幕文件失败: {str(e)}")
+        return [i.name for i in file_list] if file_list else []
 
 
 # single speaker
@@ -815,8 +884,7 @@ if __name__ == "__main__":
                                     edit_rows.append(indexttsregenbtn)
                                     edit_rows.append(customregenbtn)
                         workrefbtn.click(getworklist, inputs=[], outputs=[worklist])
-                        export_btn.click(lambda file_list, x: ([i.name for i in file_list] if file_list else []) + (
-                            [o] if (o := x.export()) else []), inputs=[input_file, STATE], outputs=[input_file])
+                        export_btn.click(export_subtitle_with_new_name, inputs=[input_file, STATE], outputs=[input_file])
                         with gr.Row(equal_height=True):
                             all_selection_btn = gr.Button(value=i18n('Select All'), interactive=True, min_width=50)
                             all_selection_btn.click(None, inputs=[], outputs=edit_check_list,
