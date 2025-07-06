@@ -15,6 +15,7 @@ os.environ["current_path"] = current_path
 import shutil
 
 import gradio as gr
+
 warnings.filterwarnings("ignore", category=UserWarning)
 
 import json
@@ -60,7 +61,7 @@ def custom_api(text):
     raise i18n('You need to load custom API functions!')
 
 
-#single speaker
+# single speaker
 def generate(*args, interrupt_event: Sava_Utils.utils.Flag, proj="", in_files=[], fps=30, offset=0, max_workers=1):
     t1 = time.time()
     fps = positive_int(fps)
@@ -69,7 +70,8 @@ def generate(*args, interrupt_event: Sava_Utils.utils.Flag, proj="", in_files=[]
         return (None, i18n('Please upload the subtitle file!'), getworklist(), *load_page(Subtitles()), Subtitles())
     if Sava_Utils.config.server_mode and len(in_files) > 1:
         gr.Warning(i18n('The current mode does not allow batch processing!'))
-        return (None, i18n('The current mode does not allow batch processing!'), getworklist(), *load_page(Subtitles()), Subtitles())
+        return (None, i18n('The current mode does not allow batch processing!'), getworklist(), *load_page(Subtitles()),
+                Subtitles())
     os.makedirs(os.path.join(current_path, "SAVAdata", "output"), exist_ok=True)
     for in_file in in_files:
         try:
@@ -84,15 +86,15 @@ def generate(*args, interrupt_event: Sava_Utils.utils.Flag, proj="", in_files=[]
         Projet_dict[proj].before_gen_action(*args, config=Sava_Utils.config, notify=False, force=False)
         abs_dir = subtitle_list.get_abs_dir()
         if Sava_Utils.config.server_mode:
-            max_workers = 1        
+            max_workers = 1
         file_list = []
-        with interrupt_event:            
+        with interrupt_event:
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [executor.submit(save, args, proj=proj, dir=abs_dir, subtitle=i) for i in subtitle_list]
                 for future in tqdm(
-                    concurrent.futures.as_completed(futures),
-                    total=len(subtitle_list),
-                    desc=i18n('Synthesizing single-speaker task'),
+                        concurrent.futures.as_completed(futures),
+                        total=len(subtitle_list),
+                        desc=i18n('Synthesizing single-speaker task'),
                 ):
                     if interrupt_event.is_set():
                         executor.shutdown(wait=True, cancel_futures=True)
@@ -134,7 +136,8 @@ def generate_preprocess(interrupt_event, *args, project=None):
     return generate(*args, interrupt_event=interrupt_event, **kwargs)
 
 
-def gen_multispeaker(interrupt_event: Sava_Utils.utils.Flag, *args, remake=False):  # args: page,maxworkers,*args,subtitles
+def gen_multispeaker(interrupt_event: Sava_Utils.utils.Flag, *args,
+                     remake=False):  # args: page,maxworkers,*args,subtitles
     page = args[0]
     max_workers = int(args[1])
     subtitles: Subtitles = args[-1]
@@ -196,10 +199,10 @@ def gen_multispeaker(interrupt_event: Sava_Utils.utils.Flag, *args, remake=False
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [executor.submit(save, args, proj=project, dir=abs_dir, subtitle=i) for i in tasks[key]]
                 for future in tqdm(
-                    concurrent.futures.as_completed(futures),
-                    total=len(todo),
-                    initial=progress,
-                    desc=f"{i18n('Synthesizing multi-speaker task, the current speaker is')} :{spk}",
+                        concurrent.futures.as_completed(futures),
+                        total=len(todo),
+                        initial=progress,
+                        desc=f"{i18n('Synthesizing multi-speaker task, the current speaker is')} :{spk}",
                 ):
                     if interrupt_event.is_set():
                         executor.shutdown(wait=True, cancel_futures=True)
@@ -210,7 +213,7 @@ def gen_multispeaker(interrupt_event: Sava_Utils.utils.Flag, *args, remake=False
                     if item:
                         file_list.append(item)
                 if interrupt_event.is_set():
-                    break     
+                    break
         progress += len(file_list)
         if len(file_list) == 0:
             ok = False
@@ -246,7 +249,8 @@ def save(args, proj: str = None, dir: str = None, subtitle: Subtitle = None):
                 if target_dur > 0 and (audio.shape[-1] - target_dur) > (0.01 * sr):
                     ratio = min(audio.shape[-1] / target_dur, Sava_Utils.config.max_accelerate_ratio)
                     cmd = f'ffmpeg -i "{filepath}" -filter:a atempo={ratio:.2f} -y "{filepath}.wav"'
-                    p = subprocess.Popen(cmd, cwd=current_path, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    p = subprocess.Popen(cmd, cwd=current_path, shell=True, stdout=subprocess.DEVNULL,
+                                         stderr=subprocess.DEVNULL)
                     logger.info(f"{i18n('Execute command')}:{cmd}")
                     exit_code = p.wait()
                     if exit_code == 0:
@@ -268,9 +272,11 @@ def save(args, proj: str = None, dir: str = None, subtitle: Subtitle = None):
 
 def start_hiyoriui():
     if Sava_Utils.config.bv2_pydir == "":
-        gr.Warning(i18n('Please go to the settings page to specify the corresponding environment path and do not forget to save it!'))
-        return i18n('Please go to the settings page to specify the corresponding environment path and do not forget to save it!')
-    command = f'"{Sava_Utils.config.bv2_pydir}" "{os.path.join(Sava_Utils.config.bv2_dir,"hiyoriUI.py")}" {Sava_Utils.config.bv2_args}'
+        gr.Warning(i18n(
+            'Please go to the settings page to specify the corresponding environment path and do not forget to save it!'))
+        return i18n(
+            'Please go to the settings page to specify the corresponding environment path and do not forget to save it!')
+    command = f'"{Sava_Utils.config.bv2_pydir}" "{os.path.join(Sava_Utils.config.bv2_dir, "hiyoriUI.py")}" {Sava_Utils.config.bv2_args}'
     rc_open_window(command=command, dir=Sava_Utils.config.bv2_dir)
     time.sleep(0.1)
     return f"HiyoriUI{i18n(' has been launched, please ensure the configuration is correct.')}"
@@ -278,8 +284,10 @@ def start_hiyoriui():
 
 def start_gsv():
     if Sava_Utils.config.gsv_pydir == "":
-        gr.Warning(i18n('Please go to the settings page to specify the corresponding environment path and do not forget to save it!'))
-        return i18n('Please go to the settings page to specify the corresponding environment path and do not forget to save it!')
+        gr.Warning(i18n(
+            'Please go to the settings page to specify the corresponding environment path and do not forget to save it!'))
+        return i18n(
+            'Please go to the settings page to specify the corresponding environment path and do not forget to save it!')
     if Sava_Utils.config.gsv_fallback:
         apath = "api.py"
         gr.Info(i18n('API downgraded to v1, functionality is limited.'))
@@ -288,7 +296,7 @@ def start_gsv():
         apath = "api_v2.py"
     if not os.path.exists(os.path.join(Sava_Utils.config.gsv_dir, apath)):
         raise FileNotFoundError(os.path.join(Sava_Utils.config.gsv_dir, apath))
-    command = f'"{Sava_Utils.config.gsv_pydir}" "{os.path.join(Sava_Utils.config.gsv_dir,apath)}" {Sava_Utils.config.gsv_args}'
+    command = f'"{Sava_Utils.config.gsv_pydir}" "{os.path.join(Sava_Utils.config.gsv_dir, apath)}" {Sava_Utils.config.gsv_args}'
     rc_open_window(command=command, dir=Sava_Utils.config.gsv_dir)
     time.sleep(0.1)
     return f"GSV-API{i18n(' has been launched, please ensure the configuration is correct.')}"
@@ -312,7 +320,8 @@ def remake(*args):
         subtitle_list[idx].reset_srt_time(timestamp)
     except ValueError as e:
         gr.Info(str(e))
-    if subtitle_list[idx].speaker is not None or (subtitle_list.proj is None and subtitle_list.default_speaker is not None):
+    if subtitle_list[idx].speaker is not None or (
+            subtitle_list.proj is None and subtitle_list.default_speaker is not None):
         spk = subtitle_list[idx].speaker
         if spk is None:
             spk = subtitle_list.default_speaker
@@ -404,9 +413,11 @@ if __name__ == "__main__":
                             edit_map_ui_md1 = f"### <center>{i18n('Speaker map is empty.')}</center>"
                             edit_map_ui_md2 = f"### <center>{i18n('Original Speaker')}</center>"
                             edit_map_ui_md3 = f"### <center>{i18n('Target Speaker')}</center>"
+
+
                             @gr.render(inputs=speaker_map_set)
                             def edit_map_ui(x):
-                                if len(x)==0:
+                                if len(x) == 0:
                                     gr.Markdown(value=edit_map_ui_md1)
                                     return
                                 c = refspklist()
@@ -416,26 +427,35 @@ if __name__ == "__main__":
                                 with gr.Group():
                                     for i in x:
                                         with gr.Row():
-                                            k = gr.Textbox(value=i,show_label=False,interactive=False)
-                                            v = gr.Dropdown(value=i, choices=c, show_label=False, allow_custom_value=True)
-                                            v.change(modify_spkmap, inputs=[speaker_map_dict,k,v])
-                                gr.Button(value="🗑️",variant="stop").click(lambda:(set(),dict()),outputs=[speaker_map_set,speaker_map_dict])
-                            with gr.Accordion(i18n('Identify Original Speakers'),open=True):
+                                            k = gr.Textbox(value=i, show_label=False, interactive=False)
+                                            v = gr.Dropdown(value=i, choices=c, show_label=False,
+                                                            allow_custom_value=True)
+                                            v.change(modify_spkmap, inputs=[speaker_map_dict, k, v])
+                                gr.Button(value="🗑️", variant="stop").click(lambda: (set(), dict()),
+                                                                            outputs=[speaker_map_set, speaker_map_dict])
+
+
+                            with gr.Accordion(i18n('Identify Original Speakers'), open=True):
                                 update_spkmap_btn_upload = gr.Button(value=i18n('From Upload File'))
                                 update_spkmap_btn_current = gr.Button(value=i18n('From Workspace'))
                             apply_spkmap2workspace_btn = gr.Button(value=i18n('Apply to current Workspace'))
                         create_multispeaker_btn = gr.Button(value=i18n('Create Multi-Speaker Dubbing Project'))
                     with gr.Column():
-                        TTS_ARGS=[]
+                        TTS_ARGS = []
                         for i in componments[1]:
                             TTS_ARGS.append(i.getUI())
-                    GSV_ARGS,BV2_ARGS,MSTTS_ARGS,INDEXTTS_ARGS,CUSTOM_ARGS=TTS_ARGS
+                    GSV_ARGS, BV2_ARGS, MSTTS_ARGS, INDEXTTS_ARGS, CUSTOM_ARGS = TTS_ARGS
                     with gr.Column():
                         with gr.Accordion(i18n('Other Parameters'), open=True):
-                            fps = gr.Number(label=i18n('Frame rate of Adobe Premiere project, only applicable to csv files exported from Pr'), value=30, visible=True, interactive=True, minimum=1)
-                            workers = gr.Number(label=i18n('Number of threads for sending requests'), value=2, visible=True, interactive=True, minimum=1)
-                            offset = gr.Slider(minimum=-6, maximum=6, value=0, step=0.1, label=i18n('Voice time offset (seconds)'))
-                        input_file = gr.File(label=i18n('Upload file (Batch mode only supports one speaker at a time)'), file_types=['.csv', '.srt', '.txt'], file_count='multiple')
+                            fps = gr.Number(label=i18n(
+                                'Frame rate of Adobe Premiere project, only applicable to csv files exported from Pr'),
+                                value=30, visible=True, interactive=True, minimum=1)
+                            workers = gr.Number(label=i18n('Number of threads for sending requests'), value=2,
+                                                visible=True, interactive=True, minimum=1)
+                            offset = gr.Slider(minimum=-6, maximum=6, value=0, step=0.1,
+                                               label=i18n('Voice time offset (seconds)'))
+                        input_file = gr.File(label=i18n('Upload file (Batch mode only supports one speaker at a time)'),
+                                             file_types=['.csv', '.srt', '.txt'], file_count='multiple')
 
                         # 本地视频地址输入组件 - 优化样式
                         with gr.Group():
@@ -449,7 +469,7 @@ if __name__ == "__main__":
                                     show_label=False
                                 )
                                 load_local_video_path_btn = gr.Button(
-                                    value="🔍 验证文件",
+                                    value="🚀 加载文件",
                                     scale=1,
                                     variant="primary"
                                 )
@@ -469,8 +489,8 @@ if __name__ == "__main__":
 
                         gen_textbox_output_text = gr.Textbox(label=i18n('Output Info'), interactive=False)
                         audio_output = gr.Audio(label="Output Audio")
-                        stop_btn = gr.Button(value=i18n('Stop'),variant="stop")
-                        stop_btn.click(lambda x:gr.Info(x.set()),inputs=[INTERRUPT_EVENT])
+                        stop_btn = gr.Button(value=i18n('Stop'), variant="stop")
+                        stop_btn.click(lambda x: gr.Info(x.set()), inputs=[INTERRUPT_EVENT])
                         if not Sava_Utils.config.server_mode:
                             with gr.Accordion(i18n('API Launcher')):
                                 start_hiyoriui_btn = gr.Button(value="HiyoriUI")
@@ -479,85 +499,183 @@ if __name__ == "__main__":
                                 start_gsv_btn.click(start_gsv, outputs=[gen_textbox_output_text])
                         input_file.change(file_show, inputs=[input_file], outputs=[textbox_intput_text])
 
+                        # 处理状态跟踪
+                        processing_state = gr.State(value={"processed": False, "video_path": "", "srt_path": ""})
+
+
                         # 本地视频路径处理函数
-                        def handle_local_video_path_load(video_path):
-                            """处理本地视频路径加载"""
+                        def handle_local_video_path_load(video_path, uploaded_files, current_state):
+                            """处理本地视频路径加载和音频分离"""
                             if not video_path or video_path.strip() == "":
-                                return gr.update(value="⚠️ **请输入视频文件路径**\n\n💡 示例路径：`C:/Videos/movie.mp4`")
+                                return gr.update(
+                                    value="⚠️ **请输入视频文件路径**\n\n💡 示例路径：`C:/Videos/movie.mp4`"), current_state
 
                             # 清理路径（移除引号和多余空格）
                             video_path = video_path.strip().strip('"').strip("'")
 
                             # 检查文件是否存在
                             if not os.path.exists(video_path):
-                                return gr.update(value=f"❌ **文件不存在**\n\n📂 检查路径：`{video_path}`\n\n💡 请确认文件路径是否正确")
+                                return gr.update(
+                                    value=f"❌ **文件不存在**\n\n📂 检查路径：`{video_path}`\n\n💡 请确认文件路径是否正确"), current_state
 
                             # 检查是否是文件（不是目录）
                             if not os.path.isfile(video_path):
-                                return gr.update(value=f"❌ **这是一个目录，不是文件**\n\n📂 路径：`{video_path}`\n\n💡 请选择具体的视频文件")
+                                return gr.update(
+                                    value=f"❌ **这是一个目录，不是文件**\n\n📂 路径：`{video_path}`\n\n💡 请选择具体的视频文件"), current_state
 
                             # 检查文件格式
                             file_extension = os.path.splitext(video_path)[1].lower()
-                            video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m2ts', '.mts', '.m4v', '.3gp', '.3g2', '.asf', '.rm', '.rmvb', '.vob', '.mpg', '.mpeg', '.m1v', '.m2v', '.ogv', '.ogg']
+                            video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m2ts',
+                                                '.mts', '.m4v', '.3gp', '.3g2', '.asf', '.rm', '.rmvb', '.vob', '.mpg',
+                                                '.mpeg', '.m1v', '.m2v', '.ogv', '.ogg']
 
                             if not any(video_path.lower().endswith(ext) for ext in video_extensions):
                                 supported_formats = "MP4, AVI, MKV, MOV, WMV, WebM, TS, 3GP, RMVB, MPG"
-                                return gr.update(value=f"❌ **不支持的视频格式**\n\n🎞️ 当前格式：`{file_extension.upper()}`\n\n✅ 支持格式：{supported_formats}")
+                                return gr.update(
+                                    value=f"❌ **不支持的视频格式**\n\n🎞️ 当前格式：`{file_extension.upper()}`\n\n✅ 支持格式：{supported_formats}"), current_state
 
-                            # 获取文件信息
+                            # 检查字幕文件
+                            if not uploaded_files or len(uploaded_files) == 0:
+                                return gr.update(
+                                    value="⚠️ **请先上传字幕文件**\n\n📝 需要上传 .srt 字幕文件才能进行音频分割\n\n💡 请在上方的文件上传区域选择字幕文件"), current_state
+
+                            # 获取字幕文件路径
+                            srt_file = None
+                            for file in uploaded_files:
+                                if file.name.lower().endswith('.srt'):
+                                    srt_file = file.name
+                                    break
+
+                            if not srt_file:
+                                return gr.update(
+                                    value="⚠️ **未找到字幕文件**\n\n📝 上传的文件中没有 .srt 格式的字幕文件\n\n💡 请上传正确的字幕文件"), current_state
+
+                            # 检查是否已经处理过相同的文件
+                            if (current_state["processed"] and
+                                    current_state["video_path"] == video_path and
+                                    current_state["srt_path"] == srt_file):
+                                return gr.update(
+                                    value="ℹ️ **文件已处理过**\n\n✅ 相同的视频和字幕文件已经处理过了\n\n💡 如需重新处理，请更换文件或重启程序"), current_state
+
                             try:
+                                # 获取文件信息
                                 file_size = os.path.getsize(video_path)
                                 file_size_mb = file_size / (1024 * 1024)
                                 file_name = os.path.basename(video_path)
 
                                 # 检查文件权限
                                 if not os.access(video_path, os.R_OK):
-                                    return gr.update(value=f"❌ **文件权限不足**\n\n🔒 无法读取文件：`{video_path}`\n\n💡 请检查文件权限或以管理员身份运行")
+                                    return gr.update(
+                                        value=f"❌ **文件权限不足**\n\n🔒 无法读取文件：`{video_path}`\n\n💡 请检查文件权限或以管理员身份运行"), current_state
 
-                                # 格式兼容性检查
-                                web_compatible = ['.mp4', '.webm', '.ogv']
-                                is_web_compatible = file_extension in web_compatible
-
-                                if is_web_compatible:
-                                    compatibility_info = f"🌐 **{file_extension.upper()}格式** - 浏览器兼容性优秀"
-                                else:
-                                    compatibility_info = f"🎮 **{file_extension.upper()}格式** - 建议使用外部播放器"
-
-                                # 创建美观的反馈信息
+                                # 开始处理
                                 feedback_message = f"""
-🎉 **视频文件验证成功**
+🚀 **开始处理视频文件**
 
 📋 **文件信息**
-• 📁 文件名: `{file_name}`
+• 📁 视频文件: `{file_name}`
 • 📏 文件大小: **{file_size_mb:.1f} MB**
 • 🎞️ 视频格式: **{file_extension.upper()}**
-• {compatibility_info}
+• 📝 字幕文件: `{os.path.basename(srt_file)}`
 
-📂 **完整路径**
-```
-{video_path}
-```
+⏳ **正在执行以下步骤:**
+1. 🎵 从视频中分离音频 (separate_video_audio)
+2. ✂️ 根据字幕分割音频 (split_audio_by_subtitles)
 
-✨ 文件已准备就绪，可以进行后续处理！
+请稍候...
                                 """.strip()
 
-                                return gr.update(value=feedback_message)
+                                # 导入音频分离模块
+                                import sys
+                                sys.path.insert(0, 'Sava_Utils')
+                                import audio_separator
+
+                                # 步骤1: 分离视频音频
+                                # 生成唯一的哈希目录名（基于视频路径和字幕路径）
+                                import hashlib
+                                hash_input = f"{video_path}_{srt_file}_{time.time()}"
+                                session_hash = hashlib.sha256(hash_input.encode()).hexdigest()
+
+                                # 使用项目标准的存储路径，包含哈希子目录
+                                base_temp_dir = os.path.join(current_path, "SAVAdata", "temp")
+                                output_dir = os.path.join(base_temp_dir, "audio_processing", session_hash)
+                                os.makedirs(output_dir, exist_ok=True)
+
+                                result = audio_separator.separate_video_audio(video_path, output_dir)
+
+                                # 使用人声音频进行分割
+                                vocal_audio_path = result.get('vocal_audio')
+                                if not vocal_audio_path or not os.path.exists(vocal_audio_path):
+                                    return gr.update(
+                                        value="❌ **音频分离失败**\n\n🔧 无法生成人声音频文件\n\n💡 请检查视频文件是否包含音频轨道"), current_state
+
+                                # 步骤2: 根据字幕分割音频
+                                segments_dir = os.path.join(output_dir, "segments")
+                                os.makedirs(segments_dir, exist_ok=True)
+                                segments = audio_separator.split_audio_by_subtitles(vocal_audio_path, srt_file,
+                                                                                    segments_dir)
+
+                                # 更新处理状态
+                                new_state = {
+                                    "processed": True,
+                                    "video_path": video_path,
+                                    "srt_path": srt_file
+                                }
+
+                                # 成功反馈
+                                success_message = f"""
+🎉 **处理完成！**
+
+✅ **处理结果**
+• 🎬 无声视频: `{os.path.basename(result.get('raw_video', 'N/A'))}`
+• 🎵 原始音频: `{os.path.basename(result.get('raw_audio', 'N/A'))}`
+• 🎤 人声音频: `{os.path.basename(result.get('vocal_audio', 'N/A'))}`
+• 🎼 背景音乐: `{os.path.basename(result.get('background_audio', 'N/A'))}`
+• ✂️ 音频片段: **{len(segments)} 个片段**
+
+📂 **存储位置**
+• 🎬 视频文件: `SAVAdata/temp/audio_processing/{session_hash[:8]}...`
+• ✂️ 音频片段: `SAVAdata/temp/audio_processing/{session_hash[:8]}.../segments/`
+
+🔑 **会话ID**: `{session_hash[:16]}...`
+
+🎯 文件已隔离保存，不同操作结果互不干扰！
+                                """.strip()
+
+                                return gr.update(value=success_message), new_state
 
                             except Exception as e:
-                                return gr.update(value=f"❌ **读取文件信息失败**\n\n🔧 错误详情：`{str(e)}`\n\n💡 请检查文件是否被其他程序占用或文件是否损坏")
+                                error_message = f"""
+❌ **处理失败**
+
+🔧 **错误详情**
+```
+{str(e)}
+```
+
+💡 **可能的解决方案:**
+• 检查视频文件是否完整
+• 确认字幕文件格式正确
+• 检查磁盘空间是否充足
+• 重启程序后重试
+                                """.strip()
+                                return gr.update(value=error_message), current_state
+
 
                         # 绑定本地视频路径加载事件
                         load_local_video_path_btn.click(
                             handle_local_video_path_load,
-                            inputs=[local_video_path_input],
-                            outputs=[gen_textbox_output_text]
+                            inputs=[local_video_path_input, input_file, processing_state],
+                            outputs=[gen_textbox_output_text, processing_state]
                         )
+
 
                         # 合成视频处理函数
                         def handle_compose_video(video_path, subtitle_files):
                             """处理视频合成"""
                             if not video_path or video_path.strip() == "":
-                                return gr.update(value="⚠️ **请先验证视频文件**\n\n💡 请在上方输入视频路径并点击'验证文件'按钮")
+                                return gr.update(
+                                    value="⚠️ **请先验证视频文件**\n\n💡 请在上方输入视频路径并点击'验证文件'按钮")
 
                             # 清理路径
                             video_path = video_path.strip().strip('"').strip("'")
@@ -570,8 +688,10 @@ if __name__ == "__main__":
                             subtitle_info = ""
                             if subtitle_files and len(subtitle_files) > 0:
                                 subtitle_count = len(subtitle_files)
-                                subtitle_names = [os.path.basename(f.name) if hasattr(f, 'name') else str(f) for f in subtitle_files]
-                                subtitle_info = f"\n📄 **字幕文件**: {subtitle_count}个文件\n• " + "\n• ".join(subtitle_names)
+                                subtitle_names = [os.path.basename(f.name) if hasattr(f, 'name') else str(f) for f in
+                                                  subtitle_files]
+                                subtitle_info = f"\n📄 **字幕文件**: {subtitle_count}个文件\n• " + "\n• ".join(
+                                    subtitle_names)
                             else:
                                 subtitle_info = "\n⚠️ **字幕文件**: 未上传字幕文件"
 
@@ -607,6 +727,7 @@ if __name__ == "__main__":
 
                             return gr.update(value=compose_info)
 
+
                         # 绑定合成视频事件
                         compose_video_btn.click(
                             handle_compose_video,
@@ -614,140 +735,241 @@ if __name__ == "__main__":
                             outputs=[gen_textbox_output_text]
                         )
 
-                with gr.Accordion(label=i18n('Editing area *Note: DO NOT clear temporary files while using this function.'), open=True):
+                with gr.Accordion(
+                        label=i18n('Editing area *Note: DO NOT clear temporary files while using this function.'),
+                        open=True):
                     with gr.Column():
                         edit_rows = []
                         edit_real_index_list = []
                         edit_check_list = []
                         edit_start_end_time_list = []
                         with gr.Row(equal_height=True):
-                            worklist = gr.Dropdown(choices=workspaces_list if len(workspaces_list) > 0 else [""], label=i18n('History'), scale=2)
-                            workrefbtn = gr.Button(value="🔄️", scale=1, min_width=40, visible=not Sava_Utils.config.server_mode, interactive=not Sava_Utils.config.server_mode)
+                            worklist = gr.Dropdown(choices=workspaces_list if len(workspaces_list) > 0 else [""],
+                                                   label=i18n('History'), scale=2)
+                            workrefbtn = gr.Button(value="🔄️", scale=1, min_width=40,
+                                                   visible=not Sava_Utils.config.server_mode,
+                                                   interactive=not Sava_Utils.config.server_mode)
                             workloadbtn = gr.Button(value=i18n('Load'), scale=1, min_width=40)
-                            page_slider = gr.Slider(minimum=1, maximum=1, value=1, label="", step=Sava_Utils.config.num_edit_rows, scale=5)
-                            audio_player = gr.Audio(show_label=False, value=None, interactive=False, autoplay=True, scale=4, waveform_options={"show_recording_waveform":False})
+                            page_slider = gr.Slider(minimum=1, maximum=1, value=1, label="",
+                                                    step=Sava_Utils.config.num_edit_rows, scale=5)
+                            audio_player = gr.Audio(show_label=False, value=None, interactive=False, autoplay=True,
+                                                    scale=4, waveform_options={"show_recording_waveform": False})
                             recompose_btn = gr.Button(value=i18n('Reassemble Audio'), scale=1, min_width=100)
                             export_btn = gr.Button(value=i18n('Export Subtitles'), scale=1, min_width=100)
                         for x in range(Sava_Utils.config.num_edit_rows):
-                            edit_real_index = gr.Number(show_label=False, visible=False, value=-1, interactive=False)  # real index
+                            edit_real_index = gr.Number(show_label=False, visible=False, value=-1,
+                                                        interactive=False)  # real index
                             with gr.Row(equal_height=True, height=55):
-                                edit_check = gr.Checkbox(value=False, interactive=True, min_width=40, show_label=False, label="", scale=0)
+                                edit_check = gr.Checkbox(value=False, interactive=True, min_width=40, show_label=False,
+                                                         label="", scale=0)
                                 edit_check_list.append(edit_check)
                                 edit_rows.append(edit_real_index)  # real index
                                 edit_real_index_list.append(edit_real_index)
-                                edit_rows.append(gr.Textbox(scale=1, visible=False, show_label=False, interactive=False, value='-1', max_lines=1, min_width=40))  # index(raw)
-                                edit_start_end_time = gr.Textbox(scale=3, visible=False, show_label=False, interactive=False, value="NO INFO", max_lines=1)
+                                edit_rows.append(
+                                    gr.Textbox(scale=1, visible=False, show_label=False, interactive=False, value='-1',
+                                               max_lines=1, min_width=40))  # index(raw)
+                                edit_start_end_time = gr.Textbox(scale=3, visible=False, show_label=False,
+                                                                 interactive=False, value="NO INFO", max_lines=1)
                                 edit_start_end_time_list.append(edit_start_end_time)
                                 edit_rows.append(edit_start_end_time)  # start time and end time
-                                s_txt = gr.Textbox(scale=6, visible=False, show_label=False, interactive=False, value="NO INFO", max_lines=1)  # content
+                                s_txt = gr.Textbox(scale=6, visible=False, show_label=False, interactive=False,
+                                                   value="NO INFO", max_lines=1)  # content
                                 edit_rows.append(s_txt)
-                                edit_rows.append(gr.Textbox(show_label=False, visible=False, interactive=False, min_width=100, value="None", scale=1, max_lines=1))  # speaker
-                                edit_rows.append(gr.Textbox(value="NO INFO", show_label=False, visible=False, interactive=False, min_width=100, scale=1, max_lines=1))  # is success or delayed?
+                                edit_rows.append(
+                                    gr.Textbox(show_label=False, visible=False, interactive=False, min_width=100,
+                                               value="None", scale=1, max_lines=1))  # speaker
+                                edit_rows.append(
+                                    gr.Textbox(value="NO INFO", show_label=False, visible=False, interactive=False,
+                                               min_width=100, scale=1, max_lines=1))  # is success or delayed?
                                 with gr.Row(equal_height=True):
                                     __ = gr.Button(value="▶️", scale=1, min_width=50)
                                     __.click(play_audio, inputs=[edit_real_index, STATE], outputs=[audio_player])
-                                    bv2regenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=False)                        
-                                    bv2regenbtn.click(remake, inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt, *BV2_ARGS, STATE], outputs=[audio_player, page_slider] + edit_rows[-6:])
+                                    bv2regenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=False)
+                                    bv2regenbtn.click(remake,
+                                                      inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt,
+                                                              *BV2_ARGS, STATE],
+                                                      outputs=[audio_player, page_slider] + edit_rows[-6:])
                                     gsvregenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=True)
-                                    gsvregenbtn.click(remake, inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt, *GSV_ARGS, STATE], outputs=[audio_player, page_slider] + edit_rows[-6:])
+                                    gsvregenbtn.click(remake,
+                                                      inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt,
+                                                              *GSV_ARGS, STATE],
+                                                      outputs=[audio_player, page_slider] + edit_rows[-6:])
                                     msttsregenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=False)
-                                    msttsregenbtn.click(remake, inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt, *MSTTS_ARGS, STATE], outputs=[audio_player, page_slider] + edit_rows[-6:])
+                                    msttsregenbtn.click(remake,
+                                                        inputs=[page_slider, edit_real_index, edit_start_end_time,
+                                                                s_txt, *MSTTS_ARGS, STATE],
+                                                        outputs=[audio_player, page_slider] + edit_rows[-6:])
                                     indexttsregenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=False)
-                                    indexttsregenbtn.click(remake, inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt, *INDEXTTS_ARGS, STATE], outputs=[audio_player, page_slider] + edit_rows[-6:])
+                                    indexttsregenbtn.click(remake,
+                                                           inputs=[page_slider, edit_real_index, edit_start_end_time,
+                                                                   s_txt, *INDEXTTS_ARGS, STATE],
+                                                           outputs=[audio_player, page_slider] + edit_rows[-6:])
                                     customregenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=False)
-                                    customregenbtn.click(remake, inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt, CUSTOM.choose_custom_api, STATE], outputs=[audio_player, page_slider] + edit_rows[-6:])
+                                    customregenbtn.click(remake,
+                                                         inputs=[page_slider, edit_real_index, edit_start_end_time,
+                                                                 s_txt, CUSTOM.choose_custom_api, STATE],
+                                                         outputs=[audio_player, page_slider] + edit_rows[-6:])
                                     edit_rows.append(bv2regenbtn)
                                     edit_rows.append(gsvregenbtn)
                                     edit_rows.append(msttsregenbtn)
                                     edit_rows.append(indexttsregenbtn)
                                     edit_rows.append(customregenbtn)
                         workrefbtn.click(getworklist, inputs=[], outputs=[worklist])
-                        export_btn.click(lambda file_list, x: ([i.name for i in file_list] if file_list else []) + ([o] if (o:=x.export()) else []), inputs=[input_file, STATE], outputs=[input_file])
+                        export_btn.click(lambda file_list, x: ([i.name for i in file_list] if file_list else []) + (
+                            [o] if (o := x.export()) else []), inputs=[input_file, STATE], outputs=[input_file])
                         with gr.Row(equal_height=True):
                             all_selection_btn = gr.Button(value=i18n('Select All'), interactive=True, min_width=50)
-                            all_selection_btn.click(None, inputs=[], outputs=edit_check_list, js=f"() => Array({Sava_Utils.config.num_edit_rows}).fill(true)")
-                            reverse_selection_btn = gr.Button(value=i18n('Reverse Selection'), interactive=True, min_width=50)
-                            reverse_selection_btn.click(None, inputs=edit_check_list, outputs=edit_check_list, js="(...vals) => vals.map(v => !v)")
-                            clear_selection_btn = gr.Button(value=i18n('Clear Selection'), interactive=True, min_width=50)
-                            clear_selection_btn.click(None, inputs=[], outputs=edit_check_list, js=f"() => Array({Sava_Utils.config.num_edit_rows}).fill(false)")
-                            apply_se_btn = gr.Button(value=i18n('Apply Timestamp modifications'), interactive=True, min_width=50)
-                            apply_se_btn.click(apply_start_end_time, inputs=[page_slider, STATE, *edit_real_index_list, *edit_start_end_time_list], outputs=edit_rows)
+                            all_selection_btn.click(None, inputs=[], outputs=edit_check_list,
+                                                    js=f"() => Array({Sava_Utils.config.num_edit_rows}).fill(true)")
+                            reverse_selection_btn = gr.Button(value=i18n('Reverse Selection'), interactive=True,
+                                                              min_width=50)
+                            reverse_selection_btn.click(None, inputs=edit_check_list, outputs=edit_check_list,
+                                                        js="(...vals) => vals.map(v => !v)")
+                            clear_selection_btn = gr.Button(value=i18n('Clear Selection'), interactive=True,
+                                                            min_width=50)
+                            clear_selection_btn.click(None, inputs=[], outputs=edit_check_list,
+                                                      js=f"() => Array({Sava_Utils.config.num_edit_rows}).fill(false)")
+                            apply_se_btn = gr.Button(value=i18n('Apply Timestamp modifications'), interactive=True,
+                                                     min_width=50)
+                            apply_se_btn.click(apply_start_end_time, inputs=[page_slider, STATE, *edit_real_index_list,
+                                                                             *edit_start_end_time_list],
+                                               outputs=edit_rows)
                             copy_btn = gr.Button(value=i18n('Copy'), interactive=True, min_width=50)
-                            copy_btn.click(copy_subtitle, inputs=[page_slider, STATE, *edit_check_list, *edit_real_index_list], outputs=[*edit_check_list, page_slider, *edit_rows])
+                            copy_btn.click(copy_subtitle,
+                                           inputs=[page_slider, STATE, *edit_check_list, *edit_real_index_list],
+                                           outputs=[*edit_check_list, page_slider, *edit_rows])
                             merge_btn = gr.Button(value=i18n('Merge'), interactive=True, min_width=50)
-                            merge_btn.click(merge_subtitle, inputs=[page_slider, STATE, *edit_check_list, *edit_real_index_list], outputs=[*edit_check_list, page_slider, *edit_rows])
+                            merge_btn.click(merge_subtitle,
+                                            inputs=[page_slider, STATE, *edit_check_list, *edit_real_index_list],
+                                            outputs=[*edit_check_list, page_slider, *edit_rows])
                             delete_btn = gr.Button(value=i18n('Delete'), interactive=True, min_width=50)
-                            delete_btn.click(delete_subtitle, inputs=[page_slider, STATE, *edit_check_list, *edit_real_index_list], outputs=[*edit_check_list, page_slider, *edit_rows])
-                            all_regen_btn_bv2 = gr.Button(value=i18n('Continue Generation'), variant="primary", visible=False, interactive=True, min_width=50)
+                            delete_btn.click(delete_subtitle,
+                                             inputs=[page_slider, STATE, *edit_check_list, *edit_real_index_list],
+                                             outputs=[*edit_check_list, page_slider, *edit_rows])
+                            all_regen_btn_bv2 = gr.Button(value=i18n('Continue Generation'), variant="primary",
+                                                          visible=False, interactive=True, min_width=50)
                             edit_rows.append(all_regen_btn_bv2)
-                            all_regen_btn_gsv = gr.Button(value=i18n('Continue Generation'), variant="primary", visible=True, interactive=True, min_width=50)
+                            all_regen_btn_gsv = gr.Button(value=i18n('Continue Generation'), variant="primary",
+                                                          visible=True, interactive=True, min_width=50)
                             edit_rows.append(all_regen_btn_gsv)
-                            all_regen_btn_mstts = gr.Button(value=i18n('Continue Generation'), variant="primary", visible=False, interactive=True, min_width=50)
+                            all_regen_btn_mstts = gr.Button(value=i18n('Continue Generation'), variant="primary",
+                                                            visible=False, interactive=True, min_width=50)
                             edit_rows.append(all_regen_btn_mstts)
-                            all_regen_btn_indextts = gr.Button(value=i18n('Continue Generation'), variant="primary", visible=False, interactive=True, min_width=50)
+                            all_regen_btn_indextts = gr.Button(value=i18n('Continue Generation'), variant="primary",
+                                                               visible=False, interactive=True, min_width=50)
                             edit_rows.append(all_regen_btn_indextts)
-                            all_regen_btn_custom = gr.Button(value=i18n('Continue Generation'), variant="primary", visible=False, interactive=True, min_width=50)
+                            all_regen_btn_custom = gr.Button(value=i18n('Continue Generation'), variant="primary",
+                                                             visible=False, interactive=True, min_width=50)
                             edit_rows.append(all_regen_btn_custom)
-                            all_regen_btn_bv2.click(lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args, remake=True), inputs=[INTERRUPT_EVENT, page_slider, workers, *BV2_ARGS, STATE], outputs=edit_rows)
-                            all_regen_btn_gsv.click(lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args, remake=True), inputs=[INTERRUPT_EVENT, page_slider, workers, *GSV_ARGS, STATE], outputs=edit_rows)
-                            all_regen_btn_mstts.click(lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args, remake=True), inputs=[INTERRUPT_EVENT, page_slider, workers, *MSTTS_ARGS, STATE], outputs=edit_rows)
-                            all_regen_btn_indextts.click(lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args, remake=True), inputs=[INTERRUPT_EVENT, page_slider, workers, *INDEXTTS_ARGS, STATE], outputs=edit_rows)
-                            all_regen_btn_custom.click(lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args, remake=True), inputs=[INTERRUPT_EVENT, page_slider, workers, CUSTOM.choose_custom_api, STATE], outputs=edit_rows)
+                            all_regen_btn_bv2.click(
+                                lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args,
+                                                                                                     remake=True),
+                                inputs=[INTERRUPT_EVENT, page_slider, workers, *BV2_ARGS, STATE], outputs=edit_rows)
+                            all_regen_btn_gsv.click(
+                                lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args,
+                                                                                                     remake=True),
+                                inputs=[INTERRUPT_EVENT, page_slider, workers, *GSV_ARGS, STATE], outputs=edit_rows)
+                            all_regen_btn_mstts.click(
+                                lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args,
+                                                                                                     remake=True),
+                                inputs=[INTERRUPT_EVENT, page_slider, workers, *MSTTS_ARGS, STATE], outputs=edit_rows)
+                            all_regen_btn_indextts.click(
+                                lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args,
+                                                                                                     remake=True),
+                                inputs=[INTERRUPT_EVENT, page_slider, workers, *INDEXTTS_ARGS, STATE],
+                                outputs=edit_rows)
+                            all_regen_btn_custom.click(
+                                lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args,
+                                                                                                     remake=True),
+                                inputs=[INTERRUPT_EVENT, page_slider, workers, CUSTOM.choose_custom_api, STATE],
+                                outputs=edit_rows)
 
                         page_slider.change(show_page, inputs=[page_slider, STATE], outputs=edit_rows)
                         workloadbtn.click(load_work, inputs=[worklist], outputs=[STATE, page_slider, *edit_rows])
-                        recompose_btn.click(recompose, inputs=[page_slider, STATE], outputs=[audio_output, gen_textbox_output_text, *edit_rows])
+                        recompose_btn.click(recompose, inputs=[page_slider, STATE],
+                                            outputs=[audio_output, gen_textbox_output_text, *edit_rows])
 
-                        apply_spkmap2workspace_btn.click(apply_spkmap2workspace,inputs=[speaker_map_dict,page_slider,STATE],outputs=edit_rows)
+                        apply_spkmap2workspace_btn.click(apply_spkmap2workspace,
+                                                         inputs=[speaker_map_dict, page_slider, STATE],
+                                                         outputs=edit_rows)
 
                         with gr.Accordion(i18n('Find and Replace'), open=False):
                             with gr.Row(equal_height=True):
-                                find_text_expression = gr.Textbox(show_label=False, placeholder=i18n('Find What'), scale=3)
+                                find_text_expression = gr.Textbox(show_label=False, placeholder=i18n('Find What'),
+                                                                  scale=3)
                                 target_text = gr.Textbox(show_label=False, placeholder=i18n('Replace With'), scale=3)
-                                find_and_rep_exec = gr.Textbox(show_label=False, placeholder=r'Exec... e.g. item.speaker="Name"', scale=3, visible=not Sava_Utils.config.server_mode)
+                                find_and_rep_exec = gr.Textbox(show_label=False,
+                                                               placeholder=r'Exec... e.g. item.speaker="Name"', scale=3,
+                                                               visible=not Sava_Utils.config.server_mode)
                                 enable_re = gr.Checkbox(label=i18n('Enable Regular Expression'), min_width=60, scale=1)
-                                find_next_btn = gr.Button(value=i18n('Find Next'), variant="secondary", min_width=50, scale=1)
-                                replace_all_btn = gr.Button(value=i18n('Replace All'), variant="primary", min_width=50, scale=1)
-                                find_next_btn.click(find_next, inputs=[STATE, find_text_expression, enable_re, page_slider, *edit_check_list, *edit_real_index_list], outputs=[*edit_check_list, page_slider, *edit_rows])
-                                replace_all_btn.click(find_and_replace, inputs=[STATE, find_text_expression, target_text, find_and_rep_exec, enable_re, page_slider], outputs=[page_slider, *edit_rows])
+                                find_next_btn = gr.Button(value=i18n('Find Next'), variant="secondary", min_width=50,
+                                                          scale=1)
+                                replace_all_btn = gr.Button(value=i18n('Replace All'), variant="primary", min_width=50,
+                                                            scale=1)
+                                find_next_btn.click(find_next,
+                                                    inputs=[STATE, find_text_expression, enable_re, page_slider,
+                                                            *edit_check_list, *edit_real_index_list],
+                                                    outputs=[*edit_check_list, page_slider, *edit_rows])
+                                replace_all_btn.click(find_and_replace,
+                                                      inputs=[STATE, find_text_expression, target_text,
+                                                              find_and_rep_exec, enable_re, page_slider],
+                                                      outputs=[page_slider, *edit_rows])
                 with gr.Accordion(label=i18n('Multi-speaker dubbing')):
                     with gr.Row(equal_height=True):
-                        speaker_list = gr.Dropdown(label=i18n('Select/Create Speaker'), value="None", choices=refspklist(), allow_custom_value=not Sava_Utils.config.server_mode, scale=4)
+                        speaker_list = gr.Dropdown(label=i18n('Select/Create Speaker'), value="None",
+                                                   choices=refspklist(),
+                                                   allow_custom_value=not Sava_Utils.config.server_mode, scale=4)
                         # speaker_list.change(set_default_speaker,inputs=[speaker_list,STATE])
-                        select_spk_projet = gr.Dropdown(choices=['bv2', 'gsv', 'mstts', 'indextts', 'custom'], value='gsv', interactive=True, label=i18n('TTS Project'))
+                        select_spk_projet = gr.Dropdown(choices=['bv2', 'gsv', 'mstts', 'indextts', 'custom'],
+                                                        value='gsv', interactive=True, label=i18n('TTS Project'))
                         refresh_spk_list_btn = gr.Button(value="🔄️", min_width=60, scale=0)
                         refresh_spk_list_btn.click(getspklist, inputs=[], outputs=[speaker_list])
                         apply_btn = gr.Button(value="✅", min_width=60, scale=0)
-                        apply_btn.click(apply_spk, inputs=[speaker_list, page_slider, STATE, *edit_check_list, *edit_real_index_list], outputs=[*edit_check_list, *edit_rows])
+                        apply_btn.click(apply_spk, inputs=[speaker_list, page_slider, STATE, *edit_check_list,
+                                                           *edit_real_index_list],
+                                        outputs=[*edit_check_list, *edit_rows])
 
                         save_spk_btn_bv2 = gr.Button(value="💾", min_width=60, scale=0, visible=False)
-                        save_spk_btn_bv2.click(lambda *args: save_spk(*args, project="bv2"), inputs=[speaker_list, *BV2_ARGS], outputs=[speaker_list])
+                        save_spk_btn_bv2.click(lambda *args: save_spk(*args, project="bv2"),
+                                               inputs=[speaker_list, *BV2_ARGS], outputs=[speaker_list])
                         save_spk_btn_gsv = gr.Button(value="💾", min_width=60, scale=0, visible=True)
-                        save_spk_btn_gsv.click(lambda *args: save_spk(*args, project="gsv"), inputs=[speaker_list, *GSV_ARGS], outputs=[speaker_list])
+                        save_spk_btn_gsv.click(lambda *args: save_spk(*args, project="gsv"),
+                                               inputs=[speaker_list, *GSV_ARGS], outputs=[speaker_list])
                         save_spk_btn_mstts = gr.Button(value="💾", min_width=60, scale=0, visible=False)
-                        save_spk_btn_mstts.click(lambda *args: save_spk(*args, project="mstts"), inputs=[speaker_list, *MSTTS_ARGS], outputs=[speaker_list])
+                        save_spk_btn_mstts.click(lambda *args: save_spk(*args, project="mstts"),
+                                                 inputs=[speaker_list, *MSTTS_ARGS], outputs=[speaker_list])
                         save_spk_btn_indextts = gr.Button(value="💾", min_width=60, scale=0, visible=False)
-                        save_spk_btn_indextts.click(lambda *args: save_spk(*args, project="indextts"), inputs=[speaker_list, *INDEXTTS_ARGS], outputs=[speaker_list])
+                        save_spk_btn_indextts.click(lambda *args: save_spk(*args, project="indextts"),
+                                                    inputs=[speaker_list, *INDEXTTS_ARGS], outputs=[speaker_list])
                         save_spk_btn_custom = gr.Button(value="💾", min_width=60, scale=0, visible=False)
-                        save_spk_btn_custom.click(lambda *args: save_spk(*args, project="custom"), inputs=[speaker_list, CUSTOM.choose_custom_api], outputs=[speaker_list])
+                        save_spk_btn_custom.click(lambda *args: save_spk(*args, project="custom"),
+                                                  inputs=[speaker_list, CUSTOM.choose_custom_api],
+                                                  outputs=[speaker_list])
 
-                        select_spk_projet.change(switch_spk_proj, inputs=[select_spk_projet], outputs=[save_spk_btn_bv2, save_spk_btn_gsv, save_spk_btn_mstts, save_spk_btn_indextts, save_spk_btn_custom])
+                        select_spk_projet.change(switch_spk_proj, inputs=[select_spk_projet],
+                                                 outputs=[save_spk_btn_bv2, save_spk_btn_gsv, save_spk_btn_mstts,
+                                                          save_spk_btn_indextts, save_spk_btn_custom])
 
                         del_spk_list_btn = gr.Button(value="🗑️", min_width=60, scale=0)
                         del_spk_list_btn.click(del_spk, inputs=[speaker_list], outputs=[speaker_list])
-                        start_gen_multispeaker_btn = gr.Button(value=i18n('Start Multi-speaker Synthesizing'), variant="primary")
-                        start_gen_multispeaker_btn.click(lambda process=gr.Progress(track_tqdm=True),*args:gen_multispeaker(*args), inputs=[INTERRUPT_EVENT, page_slider, workers, STATE], outputs=edit_rows + [audio_output])
+                        start_gen_multispeaker_btn = gr.Button(value=i18n('Start Multi-speaker Synthesizing'),
+                                                               variant="primary")
+                        start_gen_multispeaker_btn.click(
+                            lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args),
+                            inputs=[INTERRUPT_EVENT, page_slider, workers, STATE], outputs=edit_rows + [audio_output])
             with gr.TabItem(i18n('Auxiliary Functions')):
                 for i in componments[2]:
                     i.getUI(input_file)
             with gr.TabItem(i18n('Extended Contents')):
                 available = False
                 from Sava_Utils.extern_extensions.wav2srt_webui import WAV2SRT
+
                 WAV2SRT = WAV2SRT(config=Sava_Utils.config)
                 componments[3].append(WAV2SRT)
                 available = WAV2SRT.getUI(input_file, worklist, TRANSLATION_MODULE)
                 if not available:
-                    gr.Markdown("No additional extensions have been installed and a restart is required for the changes to take effect.<br>[Get Extentions](https://github.com/YYuX-1145/Srt-AI-Voice-Assistant/tree/main/tools)")
+                    gr.Markdown(
+                        "No additional extensions have been installed and a restart is required for the changes to take effect.<br>[Get Extentions](https://github.com/YYuX-1145/Srt-AI-Voice-Assistant/tree/main/tools)")
             with gr.TabItem(i18n('Settings')):
                 with gr.Row():
                     with gr.Column():
@@ -762,17 +984,37 @@ if __name__ == "__main__":
                         with gr.TabItem(i18n('Help & User guide')):
                             gr.Markdown(value=MANUAL.getInfo("help"))
 
-        update_spkmap_btn_upload.click(get_speaker_map_from_file, inputs=[input_file], outputs=[speaker_map_set,speaker_map_dict])
-        update_spkmap_btn_current.click(get_speaker_map_from_sub, inputs=[STATE], outputs=[speaker_map_set, speaker_map_dict])
-        create_multispeaker_btn.click(create_multi_speaker, inputs=[input_file, use_labled_text_mode,speaker_map_dict, fps, offset], outputs=[worklist, page_slider, *edit_rows, STATE])
-        BV2.gen_btn1.click(lambda process=gr.Progress(track_tqdm=True),*args: generate_preprocess(*args, project="bv2"), inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *BV2_ARGS], outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
-        GSV.gen_btn2.click(lambda process=gr.Progress(track_tqdm=True),*args: generate_preprocess(*args, project="gsv"), inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *GSV_ARGS], outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
-        MSTTS.gen_btn3.click(lambda process=gr.Progress(track_tqdm=True),*args: generate_preprocess(*args, project="mstts"), inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *MSTTS_ARGS], outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
-        INDEXTTS.gen_btn5.click(lambda process=gr.Progress(track_tqdm=True),*args: generate_preprocess(*args, project="indextts"), inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *INDEXTTS_ARGS], outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
-        CUSTOM.gen_btn4.click(lambda process=gr.Progress(track_tqdm=True),*args: generate_preprocess(*args, project="custom"), inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, CUSTOM.choose_custom_api], outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
+        update_spkmap_btn_upload.click(get_speaker_map_from_file, inputs=[input_file],
+                                       outputs=[speaker_map_set, speaker_map_dict])
+        update_spkmap_btn_current.click(get_speaker_map_from_sub, inputs=[STATE],
+                                        outputs=[speaker_map_set, speaker_map_dict])
+        create_multispeaker_btn.click(create_multi_speaker,
+                                      inputs=[input_file, use_labled_text_mode, speaker_map_dict, fps, offset],
+                                      outputs=[worklist, page_slider, *edit_rows, STATE])
+        BV2.gen_btn1.click(
+            lambda process=gr.Progress(track_tqdm=True), *args: generate_preprocess(*args, project="bv2"),
+            inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *BV2_ARGS],
+            outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
+        GSV.gen_btn2.click(
+            lambda process=gr.Progress(track_tqdm=True), *args: generate_preprocess(*args, project="gsv"),
+            inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *GSV_ARGS],
+            outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
+        MSTTS.gen_btn3.click(
+            lambda process=gr.Progress(track_tqdm=True), *args: generate_preprocess(*args, project="mstts"),
+            inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *MSTTS_ARGS],
+            outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
+        INDEXTTS.gen_btn5.click(
+            lambda process=gr.Progress(track_tqdm=True), *args: generate_preprocess(*args, project="indextts"),
+            inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *INDEXTTS_ARGS],
+            outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
+        CUSTOM.gen_btn4.click(
+            lambda process=gr.Progress(track_tqdm=True), *args: generate_preprocess(*args, project="custom"),
+            inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, CUSTOM.choose_custom_api],
+            outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
         # Stability is not ensured due to the mechanism of gradio.
 
-    app.queue(default_concurrency_limit=Sava_Utils.config.concurrency_count, max_size=2 * Sava_Utils.config.concurrency_count).launch(
+    app.queue(default_concurrency_limit=Sava_Utils.config.concurrency_count,
+              max_size=2 * Sava_Utils.config.concurrency_count).launch(
         share=args.share,
         server_port=server_port if server_port > 0 else None,
         inbrowser=True,

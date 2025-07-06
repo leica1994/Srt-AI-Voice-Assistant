@@ -131,7 +131,7 @@ class AudioSeparator:
 
         if audio_path is None:
             video_name = Path(video_path).stem
-            audio_path = self.output_dir / f"{video_name}_raw.mp3"
+            audio_path = self.output_dir / f"{video_name}_raw.wav"
 
         settings = self.QUALITY_SETTINGS[audio_quality]
         print(f"🎬 Extracting audio: {audio_quality} quality")
@@ -153,6 +153,33 @@ class AudioSeparator:
 
         except Exception as e:
             raise RuntimeError(f"FFmpeg failed: {e}")
+
+    def extract_video_from_video(self, video_path: str, video_path_output: str = None) -> str:
+        """从视频中提取无声视频（移除音频轨道）"""
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"Video file not found: {video_path}")
+
+        if video_path_output is None:
+            video_name = Path(video_path).stem
+            video_ext = Path(video_path).suffix  # 获取原视频的扩展名
+            video_path_output = self.output_dir / f"{video_name}_silent{video_ext}"
+
+        print(f"🎬 Extracting silent video...")
+
+        try:
+            stream = ffmpeg.input(str(video_path))
+            stream = ffmpeg.output(
+                stream,
+                str(video_path_output),
+                an=None,  # 移除音频
+                vcodec='copy'  # 复制视频流，不重新编码
+            )
+            ffmpeg.run(stream, overwrite_output=True, quiet=True)
+            print(f"✅ Silent video extracted: {video_path_output}")
+            return str(video_path_output)
+
+        except Exception as e:
+            raise RuntimeError(f"FFmpeg failed to extract silent video: {e}")
 
     def _load_demucs_model(self) -> None:
         """加载 Demucs 模型"""
@@ -192,12 +219,12 @@ class AudioSeparator:
         audio_name = Path(audio_path).stem
 
         if output_vocal is None:
-            output_vocal = self.output_dir / f"{audio_name}_vocal.mp3"
+            output_vocal = self.output_dir / f"{audio_name}_vocal.wav"
         else:
             output_vocal = Path(output_vocal)
 
         if output_background is None:
-            output_background = self.output_dir / f"{audio_name}_background.mp3"
+            output_background = self.output_dir / f"{audio_name}_background.wav"
         else:
             output_background = Path(output_background)
 
@@ -242,23 +269,25 @@ class AudioSeparator:
 
         self.temp_files.clear()
 
-    def process_video(self, video_path: str, audio_quality: str = "high") -> Dict[str, str]:
+    def process_video(self, video_path: str, audio_quality: str = "medium") -> Dict[str, str]:
         """完整的视频音频分离流程"""
         print(f"🚀 Processing: {Path(video_path).name}")
 
         try:
+            raw_video = self.extract_video_from_video(video_path)
             raw_audio = self.extract_audio_from_video(video_path, audio_quality=audio_quality)
             normalized_audio = self.normalize_audio_volume(raw_audio)
             vocal_audio, background_audio = self.separate_audio(normalized_audio)
 
-            processed_result = {
+            result = {
+                'raw_video': raw_video,
                 'raw_audio': raw_audio,
                 'vocal_audio': vocal_audio,
                 'background_audio': background_audio
             }
 
             print("🎉 Processing completed!")
-            return processed_result
+            return result
 
         except Exception as e:
             print(f"❌ Processing failed: {e}")
