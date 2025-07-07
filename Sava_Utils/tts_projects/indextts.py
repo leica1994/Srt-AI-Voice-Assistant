@@ -8,6 +8,15 @@ from . import TTSProjet
 from .. import logger, i18n
 from ..subtitle_text_formatter import format_subtitle_text
 
+# 可选导入音频处理库
+try:
+    import numpy as np
+    import librosa
+    AUDIO_DETECTION_AVAILABLE = True
+except ImportError:
+    AUDIO_DETECTION_AVAILABLE = False
+    logger.warning("音频检测功能不可用：numpy 或 librosa 未安装。Clone 模式将使用基础选择逻辑。")
+
 current_path = os.environ.get("current_path")
 
 
@@ -98,48 +107,256 @@ class IndexTTS(TTSProjet):
                 logger.warning("未找到segments目录，请先加载视频文件进行音频分割")
                 return None
 
-            # 根据字幕行号获取对应的segment文件
-            try:
-                if subtitle_index is None:
-                    # 如果没有指定行号，使用第一个文件（兼容性）
-                    target_filename = "segment_000001.wav"
-                else:
-                    # 根据行号生成对应的文件名（6位数字，支持999999行）
-                    target_filename = f"segment_{subtitle_index:06d}.wav"
-
-                target_file_path = os.path.join(segments_dir, target_filename)
-
-                # 检查目标文件是否存在
-                if os.path.exists(target_file_path):
-                    logger.info(f"使用clone参考音频: {target_file_path} (字幕行号: {subtitle_index})")
-                    return target_file_path
-                else:
-                    # 如果指定的文件不存在，尝试查找可用的文件
-                    logger.warning(f"指定的segment文件不存在: {target_filename}")
-
-                    # 获取所有可用的音频文件
-                    segment_files = []
-                    for file in os.listdir(segments_dir):
-                        if file.endswith(('.wav', '.mp3', '.flac', '.m4a')) and file.startswith('segment_'):
-                            segment_files.append(file)
-
-                    if not segment_files:
-                        logger.error("segments目录中没有找到音频文件")
-                        return None
-
-                    # 按文件名排序，使用第一个可用文件
-                    segment_files.sort()
-                    fallback_file = os.path.join(segments_dir, segment_files[0])
-                    logger.info(f"使用备用clone参考音频: {fallback_file}")
-                    return fallback_file
-
-            except Exception as e:
-                logger.error(f"处理segment文件时出错: {str(e)}")
-                return None
+            # 智能选择参考音频
+            return self._smart_select_reference_audio(segments_dir, subtitle_index)
 
         except Exception as e:
             logger.error(f"获取clone参考音频时出错: {str(e)}")
             return None
+
+    def _smart_select_reference_audio(self, segments_dir, subtitle_index):
+        """
+        智能选择参考音频，优先使用对应片段，如果无语音则选择最近的有效片段
+
+        Args:
+            segments_dir: segments目录路径
+            subtitle_index: 字幕行号
+
+        Returns:
+            str: 选中的音频文件路径
+        """
+        try:
+            # 如果音频检测不可用，使用基础选择逻辑
+            if not AUDIO_DETECTION_AVAILABLE:
+                return self._basic_select_reference_audio(segments_dir, subtitle_index)
+            # 获取所有segment文件
+            all_segments = []
+            for file in os.listdir(segments_dir):
+                if file.endswith(('.wav', '.mp3', '.flac', '.m4a')) and file.startswith('segment_'):
+                    # 提取文件编号
+                    try:
+                        number_str = file.replace('segment_', '').split('.')[0]
+                        number = int(number_str)
+                        all_segments.append((number, file))
+                    except ValueError:
+                        continue
+
+            if not all_segments:
+                logger.error("segments目录中没有找到有效的音频文件")
+                return None
+
+            # 按编号排序
+            all_segments.sort(key=lambda x: x[0])
+
+            # 确定目标编号
+            target_number = subtitle_index if subtitle_index is not None else 1
+
+            # 首先尝试使用对应的片段
+            target_file = None
+            for number, filename in all_segments:
+                if number == target_number:
+                    target_file = os.path.join(segments_dir, filename)
+                    break
+
+            # 如果找到对应片段，检测是否有语音
+            if target_file and os.path.exists(target_file):
+                has_voice, energy, duration = self._detect_audio_activity(target_file)
+                if has_voice:
+                    logger.info(f"使用对应片段作为参考音频: {target_file} (行号: {target_number})")
+                    return target_file
+                else:
+                    logger.warning(f"对应片段无有效语音: {target_file} (能量: {energy:.4f}, 时长: {duration:.2f}s)")
+
+            # 如果对应片段无语音或不存在，寻找最近的有效片段
+            logger.info(f"寻找最近的有效语音片段 (目标行号: {target_number})")
+
+            # 使用双向搜索策略：优先考虑距离，同时考虑前后方向
+            return self._find_nearest_valid_segment(all_segments, target_number, segments_dir)
+
+        except Exception as e:
+            logger.error(f"智能选择参考音频失败: {str(e)}")
+            # 降级到基础选择
+            return self._basic_select_reference_audio(segments_dir, subtitle_index)
+
+    def _find_nearest_valid_segment(self, all_segments, target_number, segments_dir):
+        """
+        双向搜索最近的有效语音片段
+
+        Args:
+            all_segments: 所有片段列表 [(number, filename), ...]
+            target_number: 目标行号
+            segments_dir: segments目录路径
+
+        Returns:
+            str: 选中的音频文件路径
+        """
+        # 按距离分组：相同距离的片段放在一起
+        distance_groups = {}
+        for number, filename in all_segments:
+            distance = abs(number - target_number)
+            if distance not in distance_groups:
+                distance_groups[distance] = []
+            distance_groups[distance].append((number, filename))
+
+        # 按距离从小到大检测
+        for distance in sorted(distance_groups.keys()):
+            segments_at_distance = distance_groups[distance]
+
+            # 对于相同距离的片段，智能选择方向
+            # 如果目标在末尾，优先选择前面的（编号更小的）
+            if target_number > len(all_segments) * 0.8:  # 如果目标在后80%，优先选择前面的
+                segments_at_distance.sort(key=lambda x: x[0])  # 从小到大（编号小的在前，即前面的片段）
+                direction_hint = "向前搜索"
+            else:
+                segments_at_distance.sort(key=lambda x: x[0], reverse=True)  # 从大到小（编号大的在前，即后面的片段）
+                direction_hint = "向后搜索"
+
+            logger.debug(f"检测距离 {distance} 的片段 ({direction_hint}): {[x[0] for x in segments_at_distance]}")
+
+            # 检测这个距离上的所有片段
+            for number, filename in segments_at_distance:
+                file_path = os.path.join(segments_dir, filename)
+
+                if not AUDIO_DETECTION_AVAILABLE:
+                    # 如果没有音频检测库，直接返回第一个找到的
+                    logger.info(f"使用最近片段 (无音频检测): {file_path} (行号: {number}, 距离: {distance})")
+                    return file_path
+
+                has_voice, energy, duration = self._detect_audio_activity(file_path)
+
+                if has_voice:
+                    direction = "前面" if number < target_number else "后面" if number > target_number else "当前"
+                    logger.info(f"找到有效语音片段: {file_path} (行号: {number}, 距离: {distance}, "
+                              f"方向: {direction}, 能量: {energy:.4f}, 时长: {duration:.2f}s)")
+                    return file_path
+                else:
+                    logger.debug(f"片段无有效语音: {file_path} (行号: {number}, 距离: {distance}, 能量: {energy:.4f})")
+
+        # 如果所有片段都没有有效语音，使用启发式选择
+        return self._fallback_segment_selection(all_segments, target_number, segments_dir)
+
+    def _fallback_segment_selection(self, all_segments, target_number, segments_dir):
+        """
+        备选片段选择策略
+
+        Args:
+            all_segments: 所有片段列表
+            target_number: 目标行号
+            segments_dir: segments目录路径
+
+        Returns:
+            str: 选中的音频文件路径
+        """
+        logger.warning("所有片段都无有效语音，使用备选策略")
+
+        # 策略1: 选择中间位置的片段（通常语音质量较好）
+        middle_index = len(all_segments) // 2
+        if middle_index < len(all_segments):
+            middle_segment = all_segments[middle_index]
+            middle_file = os.path.join(segments_dir, middle_segment[1])
+            logger.info(f"使用中间片段作为备选: {middle_file} (行号: {middle_segment[0]})")
+            return middle_file
+
+        # 策略2: 如果没有中间片段，使用第一个
+        if all_segments:
+            first_segment = all_segments[0]
+            first_file = os.path.join(segments_dir, first_segment[1])
+            logger.info(f"使用第一个片段作为备选: {first_file} (行号: {first_segment[0]})")
+            return first_file
+
+        # 策略3: 如果连片段都没有，返回None
+        logger.error("没有找到任何可用的音频片段")
+        return None
+
+    def _basic_select_reference_audio(self, segments_dir, subtitle_index):
+        """
+        基础参考音频选择（不依赖音频检测库）
+
+        Args:
+            segments_dir: segments目录路径
+            subtitle_index: 字幕行号
+
+        Returns:
+            str: 选中的音频文件路径
+        """
+        try:
+            # 获取所有segment文件
+            all_segments = []
+            for file in os.listdir(segments_dir):
+                if file.endswith(('.wav', '.mp3', '.flac', '.m4a')) and file.startswith('segment_'):
+                    try:
+                        number_str = file.replace('segment_', '').split('.')[0]
+                        number = int(number_str)
+                        all_segments.append((number, file))
+                    except ValueError:
+                        continue
+
+            if not all_segments:
+                logger.error("segments目录中没有找到有效的音频文件")
+                return None
+
+            # 按编号排序
+            all_segments.sort(key=lambda x: x[0])
+
+            # 确定目标编号
+            target_number = subtitle_index if subtitle_index is not None else 1
+
+            # 首先尝试使用对应的片段
+            for number, filename in all_segments:
+                if number == target_number:
+                    target_file = os.path.join(segments_dir, filename)
+                    if os.path.exists(target_file):
+                        logger.info(f"使用对应片段作为参考音频: {target_file} (行号: {target_number})")
+                        return target_file
+
+            # 如果对应片段不存在，使用双向搜索选择最近的片段
+            return self._basic_find_nearest_segment(all_segments, target_number, segments_dir)
+
+        except Exception as e:
+            logger.error(f"基础选择参考音频失败: {str(e)}")
+            return None
+
+    def _basic_find_nearest_segment(self, all_segments, target_number, segments_dir):
+        """
+        基础双向搜索最近片段（不依赖音频检测）
+
+        Args:
+            all_segments: 所有片段列表
+            target_number: 目标行号
+            segments_dir: segments目录路径
+
+        Returns:
+            str: 选中的音频文件路径
+        """
+        # 按距离分组
+        distance_groups = {}
+        for number, filename in all_segments:
+            distance = abs(number - target_number)
+            if distance not in distance_groups:
+                distance_groups[distance] = []
+            distance_groups[distance].append((number, filename))
+
+        # 按距离从小到大选择
+        for distance in sorted(distance_groups.keys()):
+            segments_at_distance = distance_groups[distance]
+
+            # 智能方向选择
+            if target_number > len(all_segments) * 0.8:  # 目标在后80%
+                # 优先选择前面的片段
+                selected = min(segments_at_distance, key=lambda x: x[0])
+                direction = "向前"
+            else:
+                # 优先选择后面的片段
+                selected = max(segments_at_distance, key=lambda x: x[0])
+                direction = "向后"
+
+            selected_file = os.path.join(segments_dir, selected[1])
+            logger.info(f"使用最近片段: {selected_file} (行号: {selected[0]}, 距离: {distance}, "
+                       f"目标: {target_number}, 方向: {direction})")
+            return selected_file
+
+        # 如果没有找到，返回None
+        return None
 
     def _check_segments_exist(self):
         """
@@ -168,6 +385,79 @@ class IndexTTS(TTSProjet):
         except Exception as e:
             logger.error(f"检查segments时出错: {str(e)}")
             return False
+
+    def _detect_audio_activity(self, audio_path):
+        """
+        检测音频文件是否包含有效的语音活动
+
+        Args:
+            audio_path: 音频文件路径
+
+        Returns:
+            tuple: (has_voice, energy_level, duration)
+        """
+        # 如果音频检测库不可用，返回默认值
+        if not AUDIO_DETECTION_AVAILABLE:
+            return True, 1.0, 1.0  # 假设有语音
+
+        try:
+            # 加载音频文件
+            y, sr = librosa.load(audio_path, sr=None)
+
+            # 计算音频时长
+            duration = len(y) / sr
+
+            # 如果音频太短（小于0.1秒），认为无效
+            if duration < 0.1:
+                return False, 0.0, duration
+
+            # 计算RMS能量
+            rms = librosa.feature.rms(y=y)[0]
+            avg_energy = np.mean(rms)
+
+            # 计算过零率（语音特征）
+            zcr = librosa.feature.zero_crossing_rate(y)[0]
+            avg_zcr = np.mean(zcr)
+
+            # 计算频谱质心（音色特征）
+            spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+            avg_centroid = np.mean(spectral_centroids)
+
+            # 语音活动检测阈值（调整为宽松检测，只过滤明显噪音）
+            energy_threshold = 0.02   # RMS能量阈值（适中，过滤极低音量）
+            zcr_threshold = 0.03      # 过零率阈值（宽松，保留大部分音频）
+            centroid_threshold = 800  # 频谱质心阈值（宽松，保留低频语音）
+
+            # 基础语音检测（宽松条件）
+            basic_voice_check = (
+                avg_energy > energy_threshold and
+                avg_zcr > zcr_threshold and
+                avg_centroid > centroid_threshold
+            )
+
+            # 简单的噪音过滤（只过滤明显的短暂噪音）
+            # 检测是否是短暂的"滋滋"声等噪音
+            is_short_noise = False
+
+            if duration < 0.1:  # 极短音频（小于0.1秒）
+                is_short_noise = True
+            elif duration < 0.3 and avg_energy < 0.05:  # 短且音量很小
+                is_short_noise = True
+            elif avg_zcr > 0.8:  # 过零率极高（典型的噪音特征）
+                is_short_noise = True
+
+            # 最终判断：基础检测通过 AND 不是短暂噪音
+            has_voice = basic_voice_check and not is_short_noise
+
+            logger.debug(f"音频检测 {audio_path}: 能量={avg_energy:.4f}, 过零率={avg_zcr:.4f}, "
+                        f"频谱质心={avg_centroid:.1f}, 时长={duration:.2f}s, "
+                        f"基础检测={basic_voice_check}, 短暂噪音={is_short_noise}, 有语音={has_voice}")
+
+            return has_voice, avg_energy, duration
+
+        except Exception as e:
+            logger.error(f"音频活动检测失败 {audio_path}: {str(e)}")
+            return False, 0.0, 0.0
 
     def api(self, api_url, text, reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k,
             top_p, temperature,

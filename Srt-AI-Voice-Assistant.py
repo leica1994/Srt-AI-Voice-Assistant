@@ -48,18 +48,28 @@ POLYPHONE = Polyphone(Sava_Utils.config)
 Projet_dict = {"bv2": BV2, "gsv": GSV, "edgetts": EDGETTS, "indextts": INDEXTTS, "custom": CUSTOM}
 
 
-def get_output_dir_with_hash(base_content=""):
+def get_output_dir_with_hash(base_content="", file_path=None):
     """
     生成带 MD5 哈希的输出目录路径
 
     Args:
-        base_content: 用于生成哈希的基础内容，如文件名、时间戳等
+        base_content: 用于生成哈希的基础内容
+        file_path: 文件路径，用于生成一致的哈希
 
     Returns:
         str: SAVAdata/output/md5hash 格式的目录路径
     """
-    # 生成哈希内容：基础内容 + 当前时间戳
-    hash_content = f"{base_content}_{datetime.datetime.now().isoformat()}"
+    # 生成一致的哈希内容
+    if file_path and os.path.exists(file_path):
+        # 使用文件的固有属性生成一致的哈希
+        file_stat = os.stat(file_path)
+        file_size = file_stat.st_size
+        file_mtime = file_stat.st_mtime
+        file_basename = os.path.basename(file_path)
+        hash_content = f"{base_content}_{file_basename}_{file_size}_{file_mtime}"
+    else:
+        # 如果没有文件路径，使用基础内容
+        hash_content = base_content
 
     # 生成 MD5 哈希
     md5_hash = hashlib.md5(hash_content.encode('utf-8')).hexdigest()[:8]
@@ -110,8 +120,8 @@ def export_subtitle_with_new_name(file_list, subtitle_state):
 
             # 如果原文件在output目录外，则使用带哈希的output目录
             if "SAVAdata" not in original_dir or "output" not in original_dir:
-                # 生成带哈希的输出目录
-                hash_output_dir = get_output_dir_with_hash(original_basename)
+                # 生成带哈希的输出目录（基于原始文件）
+                hash_output_dir = get_output_dir_with_hash(f"subtitle_{original_basename}", original_file)
                 # 指定导出路径，避免重复生成哈希目录
                 srt_filepath = os.path.join(hash_output_dir, f"{original_basename}.srt")
                 exported_srt_file = subtitle_state.export(fp=srt_filepath, open_explorer=False)
@@ -756,10 +766,22 @@ if __name__ == "__main__":
                                 sys.path.insert(0, 'Sava_Utils')
 
                                 # 步骤1: 分离视频音频
-                                # 生成唯一的哈希目录名（基于视频路径和字幕路径）
+                                # 生成一致的哈希目录名（基于文件属性，确保相同文件产生相同哈希）
+                                video_stat = os.stat(video_path)
+                                video_basename = os.path.basename(video_path)
+                                video_size = video_stat.st_size
+                                video_mtime = video_stat.st_mtime
 
-                                hash_input = f"{video_path}_{subtitle_file}_{time.time()}"
-                                session_hash = hashlib.sha256(hash_input.encode()).hexdigest()
+                                if subtitle_file and os.path.exists(subtitle_file):
+                                    subtitle_stat = os.stat(subtitle_file)
+                                    subtitle_basename = os.path.basename(subtitle_file)
+                                    subtitle_size = subtitle_stat.st_size
+                                    subtitle_mtime = subtitle_stat.st_mtime
+                                    hash_input = f"audio_processing_{video_basename}_{video_size}_{video_mtime}_{subtitle_basename}_{subtitle_size}_{subtitle_mtime}"
+                                else:
+                                    hash_input = f"audio_processing_{video_basename}_{video_size}_{video_mtime}_no_subtitle"
+
+                                session_hash = hashlib.md5(hash_input.encode('utf-8')).hexdigest()[:8]
 
                                 # 使用项目标准的存储路径，包含哈希子目录
                                 base_temp_dir = os.path.join(current_path, "SAVAdata", "temp")
@@ -964,8 +986,9 @@ if __name__ == "__main__":
                                     output_dir = existing_output_dir
                                     print(f"🔄 使用现有输出目录: {output_dir}")
                                 else:
-                                    # 创建新的哈希目录
-                                    output_dir = get_output_dir_with_hash(f"video_compose_{project_name}")
+                                    # 创建新的哈希目录（基于视频文件）
+                                    video_file_path = video_path_input or video_file_upload
+                                    output_dir = get_output_dir_with_hash(f"video_compose_{project_name}", video_file_path)
                                     os.environ["current_output_dir"] = output_dir
                                     print(f"🆕 创建新输出目录: {output_dir}")
 
