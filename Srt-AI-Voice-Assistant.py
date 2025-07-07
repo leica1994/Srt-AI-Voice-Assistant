@@ -1,3 +1,4 @@
+import hashlib
 import io
 import os
 import sys
@@ -22,11 +23,11 @@ import concurrent.futures
 from tqdm import tqdm
 from collections import defaultdict
 
-from Sava_Utils import args, MANUAL
+from Sava_Utils import args, MANUAL, audio_separator
 from Sava_Utils.utils import *
 from Sava_Utils.edit_panel import *
 from Sava_Utils.subtitle import Subtitle, Subtitles
-from Sava_Utils.video_speed_adjuster import adjust_video_speed_by_subtitles
+from Sava_Utils.video_speed_adjuster import adjust_video_speed_by_subtitles, merge_video_with_audio
 
 import Sava_Utils.tts_projects
 import Sava_Utils.tts_projects.bv2
@@ -622,41 +623,17 @@ if __name__ == "__main__":
                                     value="ℹ️ **文件已处理过**\n\n✅ 相同的视频和字幕文件已经处理过了\n\n💡 如需重新处理，请更换文件或重启程序"), current_state
 
                             try:
-                                # 获取文件信息
-                                file_size = os.path.getsize(video_path)
-                                file_size_mb = file_size / (1024 * 1024)
-                                file_name = os.path.basename(video_path)
-
                                 # 检查文件权限
                                 if not os.access(video_path, os.R_OK):
                                     return gr.update(
                                         value=f"❌ **文件权限不足**\n\n🔒 无法读取文件：`{video_path}`\n\n💡 请检查文件权限或以管理员身份运行"), current_state
 
-                                # 开始处理
-                                feedback_message = f"""
-🚀 **开始处理视频文件**
-
-📋 **文件信息**
-• 📁 视频文件: `{file_name}`
-• 📏 文件大小: **{file_size_mb:.1f} MB**
-• 🎞️ 视频格式: **{file_extension.upper()}**
-• 📝 字幕文件: `{os.path.basename(srt_file)}`
-
-⏳ **正在执行以下步骤:**
-1. 🎵 从视频中分离音频 (separate_video_audio)
-2. ✂️ 根据字幕分割音频 (split_audio_by_subtitles)
-
-请稍候...
-                                """.strip()
-
                                 # 导入音频分离模块
-                                import sys
                                 sys.path.insert(0, 'Sava_Utils')
-                                import audio_separator
 
                                 # 步骤1: 分离视频音频
                                 # 生成唯一的哈希目录名（基于视频路径和字幕路径）
-                                import hashlib
+
                                 hash_input = f"{video_path}_{srt_file}_{time.time()}"
                                 session_hash = hashlib.sha256(hash_input.encode()).hexdigest()
 
@@ -738,7 +715,8 @@ if __name__ == "__main__":
 
 
                         # 合成视频处理函数
-                        def handle_compose_video(video_path, subtitle_files, current_state, subtitles_state, audio_data):
+                        def handle_compose_video(video_path, subtitle_files, current_state, subtitles_state,
+                                                 audio_data):
                             """处理视频合成 - 完整检查版本"""
 
                             # 1. 检查字幕是否上传
@@ -799,11 +777,6 @@ if __name__ == "__main__":
 
                             # 4. 所有检查通过，开始执行合成流程
                             try:
-                                file_name = os.path.basename(video_path)
-                                file_size = os.path.getsize(video_path)
-                                file_size_mb = file_size / (1024 * 1024)
-                                file_extension = os.path.splitext(video_path)[1].lower()
-
                                 # 步骤1: 导出字幕文件
                                 # 创建临时目录用于视频处理
                                 temp_dir = os.path.join(current_path, "SAVAdata", "temp", "video_compose")
@@ -849,20 +822,21 @@ if __name__ == "__main__":
                                 )
 
                                 if not speed_result['success']:
-                                    return gr.update(value=f"❌ **视频变速处理失败**\n\n🎬 **错误**: {speed_result['message']}")
+                                    return gr.update(
+                                        value=f"❌ **视频变速处理失败**\n\n🎬 **错误**: {speed_result['message']}")
 
                                 speed_adjusted_video = speed_result['output_path']
 
                                 # 步骤4: 获取生成的音频文件路径
-                                audio_file_path = os.path.join(current_path, "SAVAdata", "output", f"{subtitles_state.dir}.wav")
+                                audio_file_path = os.path.join(current_path, "SAVAdata", "output",
+                                                               f"{subtitles_state.dir}.wav")
 
                                 if not os.path.exists(audio_file_path):
                                     return gr.update(value="❌ **音频文件不存在**\n\n🎵 **错误**: 找不到生成的音频文件")
 
                                 # 步骤5: 合成变速视频与音频
-                                from Sava_Utils.video_speed_adjuster import merge_video_with_audio
-
-                                output_video_path = os.path.join(current_path, "SAVAdata", "output", f"{subtitles_state.dir}_final.mp4")
+                                output_video_path = os.path.join(current_path, "SAVAdata", "output",
+                                                                 f"{subtitles_state.dir}_final.mp4")
 
                                 final_video = merge_video_with_audio(
                                     video_path=speed_adjusted_video,
@@ -885,7 +859,7 @@ if __name__ == "__main__":
 • 原始时长: {speed_result['original_duration']:.2f}秒
 • 目标时长: {speed_result['target_duration']:.2f}秒
 • 平均变速比: {speed_result['average_speed_ratio']:.2f}x
-• 音频成功率: {success_count/total_count*100:.1f}%
+• 音频成功率: {success_count / total_count * 100:.1f}%
 
 📁 **输出文件**
 • 🎬 最终视频: `{final_video}`
@@ -985,9 +959,9 @@ if __name__ == "__main__":
                                                       outputs=[audio_player, page_slider] + edit_rows[-6:])
                                     edgettsregenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=False)
                                     edgettsregenbtn.click(remake,
-                                                        inputs=[page_slider, edit_real_index, edit_start_end_time,
-                                                                s_txt, *EDGETTS_ARGS, STATE],
-                                                        outputs=[audio_player, page_slider] + edit_rows[-6:])
+                                                          inputs=[page_slider, edit_real_index, edit_start_end_time,
+                                                                  s_txt, *EDGETTS_ARGS, STATE],
+                                                          outputs=[audio_player, page_slider] + edit_rows[-6:])
                                     indexttsregenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=False)
                                     indexttsregenbtn.click(remake,
                                                            inputs=[page_slider, edit_real_index, edit_start_end_time,
@@ -1004,7 +978,8 @@ if __name__ == "__main__":
                                     edit_rows.append(indexttsregenbtn)
                                     edit_rows.append(customregenbtn)
                         workrefbtn.click(getworklist, inputs=[], outputs=[worklist])
-                        export_btn.click(export_subtitle_with_new_name, inputs=[input_file, STATE], outputs=[input_file])
+                        export_btn.click(export_subtitle_with_new_name, inputs=[input_file, STATE],
+                                         outputs=[input_file])
                         with gr.Row(equal_height=True):
                             all_selection_btn = gr.Button(value=i18n('Select All'), interactive=True, min_width=50)
                             all_selection_btn.click(None, inputs=[], outputs=edit_check_list,
@@ -1041,7 +1016,7 @@ if __name__ == "__main__":
                                                           visible=True, interactive=True, min_width=50)
                             edit_rows.append(all_regen_btn_gsv)
                             all_regen_btn_edgetts = gr.Button(value=i18n('Continue Generation'), variant="primary",
-                                                            visible=False, interactive=True, min_width=50)
+                                                              visible=False, interactive=True, min_width=50)
                             edit_rows.append(all_regen_btn_edgetts)
                             all_regen_btn_indextts = gr.Button(value=i18n('Continue Generation'), variant="primary",
                                                                visible=False, interactive=True, min_width=50)
@@ -1125,7 +1100,7 @@ if __name__ == "__main__":
                                                inputs=[speaker_list, *GSV_ARGS], outputs=[speaker_list])
                         save_spk_btn_edgetts = gr.Button(value="💾", min_width=60, scale=0, visible=False)
                         save_spk_btn_edgetts.click(lambda *args: save_spk(*args, project="edgetts"),
-                                                 inputs=[speaker_list, *EDGETTS_ARGS], outputs=[speaker_list])
+                                                   inputs=[speaker_list, *EDGETTS_ARGS], outputs=[speaker_list])
                         save_spk_btn_indextts = gr.Button(value="💾", min_width=60, scale=0, visible=False)
                         save_spk_btn_indextts.click(lambda *args: save_spk(*args, project="indextts"),
                                                     inputs=[speaker_list, *INDEXTTS_ARGS], outputs=[speaker_list])

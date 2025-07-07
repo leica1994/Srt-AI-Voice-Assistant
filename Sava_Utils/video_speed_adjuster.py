@@ -21,7 +21,7 @@ import subprocess
 class VideoSpeedAdjuster:
     """视频变速处理器"""
 
-    def __init__(self, output_dir: str = "output", max_workers: int = 4, use_gpu: bool = True):
+    def __init__(self, output_dir: str = None, max_workers: int = 4, use_gpu: bool = True):
         """
         初始化视频变速处理器
 
@@ -30,8 +30,9 @@ class VideoSpeedAdjuster:
             max_workers: 最大并发处理数
             use_gpu: 是否使用GPU加速
         """
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(exist_ok=True)
+        if output_dir is not None:
+            self.output_dir = Path(output_dir)
+            self.output_dir.mkdir(exist_ok=True)
 
         self.max_workers = max_workers
         self.session_id = hashlib.md5(f"{datetime.datetime.now().isoformat()}".encode()).hexdigest()[:8]
