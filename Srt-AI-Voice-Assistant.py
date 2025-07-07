@@ -1,6 +1,6 @@
+import io
 import os
 import sys
-import io
 # import inspect
 import warnings
 
@@ -12,26 +12,21 @@ elif __file__:
     os.environ["exe"] = 'False'
 os.environ["current_path"] = current_path
 
-import shutil
-
-import gradio as gr
-
 warnings.filterwarnings("ignore", category=UserWarning)
 
 import json
 
 import datetime
-import time
 import soundfile as sf
 import concurrent.futures
 from tqdm import tqdm
 from collections import defaultdict
 
-import Sava_Utils
-from Sava_Utils import logger, i18n, args, MANUAL
+from Sava_Utils import args, MANUAL
 from Sava_Utils.utils import *
 from Sava_Utils.edit_panel import *
-from Sava_Utils.subtitle import Base_subtitle, Subtitle, Subtitles
+from Sava_Utils.subtitle import Subtitle, Subtitles
+from Sava_Utils.video_speed_adjuster import adjust_video_speed_by_subtitles
 
 import Sava_Utils.tts_projects
 import Sava_Utils.tts_projects.bv2
@@ -684,11 +679,14 @@ if __name__ == "__main__":
                                 segments = audio_separator.split_audio_by_subtitles(vocal_audio_path, srt_file,
                                                                                     segments_dir)
 
-                                # 更新处理状态
+                                # 更新处理状态，保存所有处理结果
                                 new_state = {
                                     "processed": True,
                                     "video_path": video_path,
-                                    "srt_path": srt_file
+                                    "srt_path": srt_file,
+                                    "processing_result": result,  # 保存完整的处理结果
+                                    "session_hash": session_hash,
+                                    "output_dir": output_dir
                                 }
 
                                 # 成功反馈
@@ -806,60 +804,41 @@ if __name__ == "__main__":
                                 file_size_mb = file_size / (1024 * 1024)
                                 file_extension = os.path.splitext(video_path)[1].lower()
 
-                                subtitle_names = [os.path.basename(f.name) for f in srt_files]
-
-                                # 显示开始处理的信息
-                                processing_info = f"""
-🚀 **开始视频合成处理**
-
-📋 **检查结果**
-• ✅ 字幕文件: {len(srt_files)} 个 .srt 文件已上传
-• ✅ 视频文件: 已加载并处理完成
-• ✅ 音频生成: {success_count}/{total_count} 行字幕音频生成成功
-
-📹 **源视频信息**
-• 📁 文件名: `{file_name}`
-• 📏 大小: **{file_size_mb:.1f} MB**
-• 🎞️ 格式: **{file_extension.upper()}**
-
-⏳ **正在执行合成流程:**
-1. 📝 导出字幕文件...
-2. 🎬 根据字幕调整视频速度...
-3. 🎵 合成变速视频与音频...
-
-💡 **请稍候，处理中...**
-                                """.strip()
-
-                                # 显示处理中的信息（暂时注释掉yield，因为函数不是生成器）
-                                # yield gr.update(value=processing_info)
-
                                 # 步骤1: 导出字幕文件
-                                import tempfile
-                                import shutil
+                                # 创建临时目录用于视频处理
                                 temp_dir = os.path.join(current_path, "SAVAdata", "temp", "video_compose")
                                 os.makedirs(temp_dir, exist_ok=True)
 
-                                # 导出原始字幕（从上传的文件）
+                                # 创建输出目录用于最终文件
+                                output_dir = os.path.join(current_path, "SAVAdata", "output")
+                                os.makedirs(output_dir, exist_ok=True)
+
+                                # 生成基于项目名称的文件名
+                                project_name = subtitles_state.dir if subtitles_state.dir else "video_compose"
+
+                                # 导出原始字幕到临时目录（用于视频处理）
                                 original_srt_path = os.path.join(temp_dir, "original.srt")
                                 shutil.copy2(srt_files[0].name, original_srt_path)
 
-                                # 导出新字幕（从生成的音频数据）
-                                new_srt_path = os.path.join(temp_dir, "new.srt")
+                                # 导出新字幕到输出目录（最终输出文件）
+                                new_srt_path = os.path.join(output_dir, f"{project_name}_final.srt")
                                 subtitles_state.export(fp=new_srt_path, open_explorer=False)
 
                                 # 步骤2: 获取无声视频路径
                                 # 从processing_state中获取处理后的视频路径
                                 silent_video_path = None
-                                if "raw_video" in os.environ:
-                                    silent_video_path = os.environ["raw_video"]
+                                processing_result = current_state.get("processing_result", {})
+
+                                if processing_result and "raw_video" in processing_result:
+                                    silent_video_path = processing_result["raw_video"]
+                                    print(f"🎬 Found silent video: {silent_video_path}")
 
                                 if not silent_video_path or not os.path.exists(silent_video_path):
                                     # 如果没有找到无声视频，使用原视频
                                     silent_video_path = video_path
+                                    print(f"⚠️ Using original video as fallback: {silent_video_path}")
 
                                 # 步骤3: 调用视频变速处理
-                                from Sava_Utils.video_speed_adjuster import adjust_video_speed_by_subtitles
-
                                 speed_result = adjust_video_speed_by_subtitles(
                                     video_path=silent_video_path,
                                     original_srt_path=original_srt_path,
@@ -909,8 +888,8 @@ if __name__ == "__main__":
 • 音频成功率: {success_count/total_count*100:.1f}%
 
 📁 **输出文件**
-• 🎬 最终视频: `{os.path.basename(final_video)}`
-• 📂 保存位置: `SAVAdata/output/`
+• 🎬 最终视频: `{final_video}`
+• 📂 保存位置: `{os.path.dirname(final_video)}`
 
 🎉 **合成成功！**
 您的视频已经成功合成，包含了同步的音频和调整后的播放速度。
