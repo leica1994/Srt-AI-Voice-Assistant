@@ -185,7 +185,7 @@ class GSV(TTSProjet):
         return audio
 
     def _UI(self):
-        with gr.TabItem("AR-TTS"):
+        with gr.TabItem("🎯 AR-TTS"):
             self.choose_ar_tts = gr.Radio(label=i18n('Select TTS Project'), choices=["GPT_SoVITS", "CosyVoice2"], value="GPT_SoVITS", interactive=not self.server_mode)
             self.language2 = gr.Dropdown(choices=list(dict_language.items()), value=list(dict_language.values())[5], label=i18n('Inference text language'), interactive=True, allow_custom_value=False)
             with gr.Accordion(i18n('Reference Audio'), open=True):                

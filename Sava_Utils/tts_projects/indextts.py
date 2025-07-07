@@ -200,7 +200,7 @@ class IndexTTS(TTSProjet):
 
     def _UI(self):
         """创建Index-TTS的UI界面"""
-        with gr.TabItem("Index-TTS"):
+        with gr.TabItem("🔥 Index-TTS"):
             with gr.Column():
                 gr.Markdown("### Index-TTS 设置")
 
