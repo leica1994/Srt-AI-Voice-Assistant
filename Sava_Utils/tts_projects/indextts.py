@@ -6,6 +6,7 @@ from gradio_client import Client, handle_file
 
 from . import TTSProjet
 from .. import logger, i18n
+from ..subtitle_text_formatter import format_subtitle_text
 
 current_path = os.environ.get("current_path")
 
@@ -297,6 +298,14 @@ class IndexTTS(TTSProjet):
     def save_action(self, *args, text: str = None):
         """保存操作，调用API并返回音频数据"""
         reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k, top_p, temperature, num_beams, repetition_penalty, length_penalty, max_mel_tokens, max_text_tokens_per_sentence, sentences_bucket_max_size, infer_mode, api_url = args
+
+        # 字幕文本格式化处理
+        if text:
+            original_text = text
+            formatted_text = format_subtitle_text(text)
+            if formatted_text != original_text:
+                logger.info(f"字幕文本格式化: '{original_text}' → '{formatted_text}'")
+                text = formatted_text
 
         audio = self.api(
             api_url=api_url,
