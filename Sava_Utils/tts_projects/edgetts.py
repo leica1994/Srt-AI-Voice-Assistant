@@ -267,7 +267,6 @@ class EdgeTTS(TTSProjet):
         """创建 Edge-TTS 的 UI 界面"""
         with gr.TabItem("🎤 Edge-TTS"):
             with gr.Column():
-                gr.Markdown("### 🆓 免费的微软语音合成服务")
 
                 if not self.edge_voices:
                     gr.Markdown("⚠️ **Edge-TTS 不可用**")

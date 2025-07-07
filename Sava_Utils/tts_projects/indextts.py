@@ -202,7 +202,6 @@ class IndexTTS(TTSProjet):
         """创建Index-TTS的UI界面"""
         with gr.TabItem("🔥 Index-TTS"):
             with gr.Column():
-                gr.Markdown("### Index-TTS 设置")
 
                 # 参考音频模式 - 放在最上面
                 self.mode_selection = gr.Radio(
@@ -249,7 +248,7 @@ class IndexTTS(TTSProjet):
 
                 # 合成语言
                 self.language = gr.Dropdown(
-                    label="Synthesis Language",
+                    label=i18n("Inference text language"),
                     choices=["中文", "英文", "日文", "中英混合", "日英混合", "中英日混合"],
                     value="中文",
                     interactive=True

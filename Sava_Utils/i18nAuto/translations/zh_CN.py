@@ -285,7 +285,7 @@ i18n_dict = {
     "Background audio (optional, override the original video audio)": "背景音(可选，覆盖原视频声音)",
     "Dubbed audio path": "配音音频路径",
     "Start Merging Video": "合并视频",
-    "You must specify the original video along with audio or subtitles.":"你必须上传原视频，以及硬字幕或配音音频！",
+    "You must specify the original video along with audio or subtitles.": "你必须上传原视频，以及硬字幕或配音音频！",
     "WAV2SRT_INFO": """
             ### 本功能可直接用于GPT-SoVITS整合包且需要安装ffmpeg，否则需要自己安装对应依赖。<br>
             """,
