@@ -467,7 +467,7 @@ def split_audio_by_subtitles(audio_path: str, srt_path: str, segments_output_dir
         # 直接按字幕时间分割
         segment = audio[start_ms:end_ms]
 
-        segment_filename = f"segment_{subtitle['number']:04d}.wav"
+        segment_filename = f"segment_{subtitle['number']:06d}.wav"
         segment_path = segments_output_dir / segment_filename
 
         segment.export(str(segment_path), format="wav")

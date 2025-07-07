@@ -398,6 +398,8 @@ def gen_multispeaker(interrupt_event: Sava_Utils.utils.Flag, *args,
 
 
 def save(args, proj: str = None, dir: str = None, subtitle: Subtitle = None):
+    # 设置当前字幕索引环境变量，供 Clone 模式使用
+    os.environ["current_subtitle_index"] = str(subtitle.index)
     audio = Projet_dict[proj].save_action(*args, text=subtitle.text)
     if audio is not None:
         if audio[:4] == b'RIFF' and audio[8:12] == b'WAVE':
@@ -793,6 +795,9 @@ if __name__ == "__main__":
 
                                 segments = audio_separator.split_audio_by_subtitles(vocal_audio_path, split_subtitle_file,
                                                                                     segments_dir)
+
+                                # 设置环境变量供 Clone 模式使用
+                                os.environ["current_video_path"] = video_path
 
                                 # 更新处理状态，保存所有处理结果
                                 new_state = {

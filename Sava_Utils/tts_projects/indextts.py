@@ -1,4 +1,5 @@
 import os
+import json
 
 import gradio as gr
 from gradio_client import Client, handle_file
@@ -62,6 +63,111 @@ class IndexTTS(TTSProjet):
             # 如果都不存在，返回None
             return None
 
+    def _get_clone_reference_audio(self, subtitle_index=None):
+        """
+        获取clone模式的参考音频
+        检查视频是否已加载，如果未加载则提示用户先加载视频
+        如果已加载，根据字幕行号使用对应的音频片段作为参考音频
+
+        Args:
+            subtitle_index: 字幕行号，用于确定使用哪个segment文件
+        """
+        try:
+            # 检查是否有当前视频路径环境变量
+            current_video_path = os.environ.get("current_video_path")
+            if not current_video_path or not os.path.exists(current_video_path):
+                return None
+
+            # 检查是否有segments目录
+            current_path = os.environ.get("current_path", ".")
+            segments_dir = None
+
+            # 查找segments目录（实际结构: SAVAdata/temp/audio_processing/{hash}/segments）
+            audio_processing_base = os.path.join(current_path, "SAVAdata", "temp", "audio_processing")
+            if os.path.exists(audio_processing_base):
+                for hash_dir in os.listdir(audio_processing_base):
+                    hash_dir_path = os.path.join(audio_processing_base, hash_dir)
+                    if os.path.isdir(hash_dir_path):
+                        segments_path = os.path.join(hash_dir_path, "segments")
+                        if os.path.exists(segments_path):
+                            segments_dir = segments_path
+                            break
+
+            if not segments_dir:
+                logger.warning("未找到segments目录，请先加载视频文件进行音频分割")
+                return None
+
+            # 根据字幕行号获取对应的segment文件
+            try:
+                if subtitle_index is None:
+                    # 如果没有指定行号，使用第一个文件（兼容性）
+                    target_filename = "segment_000001.wav"
+                else:
+                    # 根据行号生成对应的文件名（6位数字，支持999999行）
+                    target_filename = f"segment_{subtitle_index:06d}.wav"
+
+                target_file_path = os.path.join(segments_dir, target_filename)
+
+                # 检查目标文件是否存在
+                if os.path.exists(target_file_path):
+                    logger.info(f"使用clone参考音频: {target_file_path} (字幕行号: {subtitle_index})")
+                    return target_file_path
+                else:
+                    # 如果指定的文件不存在，尝试查找可用的文件
+                    logger.warning(f"指定的segment文件不存在: {target_filename}")
+
+                    # 获取所有可用的音频文件
+                    segment_files = []
+                    for file in os.listdir(segments_dir):
+                        if file.endswith(('.wav', '.mp3', '.flac', '.m4a')) and file.startswith('segment_'):
+                            segment_files.append(file)
+
+                    if not segment_files:
+                        logger.error("segments目录中没有找到音频文件")
+                        return None
+
+                    # 按文件名排序，使用第一个可用文件
+                    segment_files.sort()
+                    fallback_file = os.path.join(segments_dir, segment_files[0])
+                    logger.info(f"使用备用clone参考音频: {fallback_file}")
+                    return fallback_file
+
+            except Exception as e:
+                logger.error(f"处理segment文件时出错: {str(e)}")
+                return None
+
+        except Exception as e:
+            logger.error(f"获取clone参考音频时出错: {str(e)}")
+            return None
+
+    def _check_segments_exist(self):
+        """
+        检查 segments 目录是否存在且包含音频文件
+        """
+        try:
+            current_path = os.environ.get("current_path", ".")
+
+            # 实际的目录结构是: SAVAdata/temp/audio_processing/{hash}/segments
+            audio_processing_base = os.path.join(current_path, "SAVAdata", "temp", "audio_processing")
+
+            if not os.path.exists(audio_processing_base):
+                return False
+
+            # 查找 segments 目录
+            for hash_dir in os.listdir(audio_processing_base):
+                hash_dir_path = os.path.join(audio_processing_base, hash_dir)
+                if os.path.isdir(hash_dir_path):
+                    segments_path = os.path.join(hash_dir_path, "segments")
+                    if os.path.exists(segments_path):
+                        # 检查是否有音频文件
+                        for file in os.listdir(segments_path):
+                            if file.endswith(('.wav', '.mp3', '.flac', '.m4a')):
+                                return True
+            return False
+        except Exception as e:
+            logger.error(f"检查segments时出错: {str(e)}")
+            return False
+
     def api(self, api_url, text, reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k,
             top_p, temperature,
             num_beams, repetition_penalty, length_penalty, max_mel_tokens,
@@ -92,9 +198,23 @@ class IndexTTS(TTSProjet):
                     return None
                 audio_file_path = reference_audio
             elif mode_selection == "clone":
-                # clone模式的处理逻辑，这里可能需要特殊处理
-                logger.info("使用clone模式，无需参考音频文件")
-                audio_file_path = None  # clone模式可能不需要音频文件
+                # clone模式根据字幕行号使用对应的segment作为参考音频
+                logger.info("使用clone模式，获取参考音频...")
+
+                # 获取当前字幕索引
+                subtitle_index = None
+                try:
+                    subtitle_index_str = os.environ.get("current_subtitle_index")
+                    if subtitle_index_str:
+                        subtitle_index = int(subtitle_index_str)
+                except (ValueError, TypeError):
+                    logger.warning("无法获取字幕索引，将使用第一个segment")
+                    subtitle_index = None
+
+                audio_file_path = self._get_clone_reference_audio(subtitle_index)
+                if audio_file_path is None:
+                    logger.error("无法获取clone参考音频")
+                    return None
 
             logger.info(f"Index-TTS API调用参数: text={text[:50]}..., mode={mode_selection}, "
                         f"builtin_audio={builtin_audio_selection if mode_selection == '内置' else 'N/A'}, "
@@ -470,6 +590,16 @@ class IndexTTS(TTSProjet):
             raise Exception(i18n('Please upload reference audio for custom mode!'))
         elif mode_selection == "内置" and not builtin_audio_selection:
             raise Exception("请选择内置音频!")
+        elif mode_selection == "clone":
+            # Clone 模式预检查：确保视频已加载
+            current_video_path = os.environ.get("current_video_path")
+            if not current_video_path or not os.path.exists(current_video_path):
+                raise Exception("🎬 Clone模式需要先加载视频文件！\n\n📁 请先点击右侧的'🚀 加载文件'按钮上传视频文件。")
+
+            # 检查是否有 segments
+            segments_found = self._check_segments_exist()
+            if not segments_found:
+                raise Exception("🎵 未找到音频分割片段！\n\n🔄 请确保视频文件已正确加载并完成音频分割处理。")
 
         pargs = (reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k, top_p,
                  temperature, num_beams, repetition_penalty, length_penalty, max_mel_tokens,
