@@ -626,17 +626,25 @@ if __name__ == "__main__":
                         input_file = gr.File(label=i18n('Upload file (Batch mode only supports one speaker at a time)'),
                                              file_types=['.csv', '.srt', '.ass', '.vtt', '.txt'], file_count='multiple')
 
-                        # 本地视频地址输入组件 - 优化样式
+                        # 视频文件选择组件 - 支持文件选择和路径输入
                         with gr.Group():
-                            gr.Markdown("视频文件路径")
+                            gr.Markdown("视频文件")
+                            with gr.Tabs():
+                                with gr.TabItem("📁 选择文件"):
+                                    video_file_upload = gr.File(
+                                        label="选择视频文件",
+                                        file_types=['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.ts'],
+                                        type="filepath"
+                                    )
+                                with gr.TabItem("📝 输入路径"):
+                                    local_video_path_input = gr.Textbox(
+                                        label="",
+                                        placeholder="🎬 输入本地视频文件路径，例如：C:/Videos/video.mp4",
+                                        container=False,
+                                        show_label=False
+                                    )
+
                             with gr.Row():
-                                local_video_path_input = gr.Textbox(
-                                    label="",
-                                    placeholder="🎬 输入本地视频文件路径，例如：C:/Videos/video.mp4",
-                                    scale=4,
-                                    container=False,
-                                    show_label=False
-                                )
                                 load_local_video_path_btn = gr.Button(
                                     value="🚀 加载文件",
                                     scale=1,
@@ -672,25 +680,34 @@ if __name__ == "__main__":
                         processing_state = gr.State(value={"processed": False, "video_path": "", "srt_path": ""})
 
 
-                        # 本地视频路径处理函数
-                        def handle_local_video_path_load(video_path, uploaded_files, current_state):
-                            """处理本地视频路径加载和音频分离"""
-                            if not video_path or video_path.strip() == "":
-                                return gr.update(
-                                    value="⚠️ **请输入视频文件路径**\n\n💡 示例路径：`C:/Videos/movie.mp4`"), current_state
+                        # 视频文件加载处理函数
+                        def handle_video_file_load(video_file_upload, video_path_input, uploaded_files, current_state):
+                            """处理视频文件加载和音频分离 - 支持文件选择和路径输入"""
 
-                            # 清理路径（移除引号和多余空格）
-                            video_path = video_path.strip().strip('"').strip("'")
+                            # 确定视频文件路径
+                            video_path = None
+
+                            # 优先使用文件上传
+                            if video_file_upload:
+                                video_path = video_file_upload
+                                source_type = "文件选择"
+                            # 其次使用路径输入
+                            elif video_path_input and video_path_input.strip():
+                                video_path = video_path_input.strip().strip('"').strip("'")
+                                source_type = "路径输入"
+                            else:
+                                return gr.update(
+                                    value="⚠️ **请选择视频文件或输入文件路径**\n\n💡 可以通过以下方式之一：\n• 📁 在'选择文件'标签页中选择视频文件\n• 📝 在'输入路径'标签页中输入文件路径"), current_state
 
                             # 检查文件是否存在
                             if not os.path.exists(video_path):
                                 return gr.update(
-                                    value=f"❌ **文件不存在**\n\n📂 检查路径：`{video_path}`\n\n💡 请确认文件路径是否正确"), current_state
+                                    value=f"❌ **文件不存在**\n\n📂 检查路径：`{video_path}`\n🔧 来源：{source_type}\n\n💡 请确认文件路径是否正确"), current_state
 
                             # 检查是否是文件（不是目录）
                             if not os.path.isfile(video_path):
                                 return gr.update(
-                                    value=f"❌ **这是一个目录，不是文件**\n\n📂 路径：`{video_path}`\n\n💡 请选择具体的视频文件"), current_state
+                                    value=f"❌ **这是一个目录，不是文件**\n\n📂 路径：`{video_path}`\n🔧 来源：{source_type}\n\n💡 请选择具体的视频文件"), current_state
 
                             # 检查文件格式
                             file_extension = os.path.splitext(video_path)[1].lower()
@@ -849,18 +866,25 @@ if __name__ == "__main__":
                                 return gr.update(value=error_message), current_state
 
 
-                        # 绑定本地视频路径加载事件
+                        # 绑定视频文件加载事件
                         load_local_video_path_btn.click(
-                            handle_local_video_path_load,
-                            inputs=[local_video_path_input, input_file, processing_state],
+                            handle_video_file_load,
+                            inputs=[video_file_upload, local_video_path_input, input_file, processing_state],
                             outputs=[gen_textbox_output_text, processing_state]
                         )
 
 
                         # 合成视频处理函数
-                        def handle_compose_video(video_path, subtitle_files, current_state, subtitles_state,
+                        def handle_compose_video(video_file_upload, video_path_input, subtitle_files, current_state, subtitles_state,
                                                  audio_data):
                             """处理视频合成 - 完整检查版本"""
+
+                            # 确定视频文件路径
+                            video_path = None
+                            if video_file_upload:
+                                video_path = video_file_upload
+                            elif video_path_input and video_path_input.strip():
+                                video_path = video_path_input.strip().strip('"').strip("'")
 
                             # 1. 检查字幕是否上传
                             if not subtitle_files or len(subtitle_files) == 0:
@@ -1104,7 +1128,7 @@ if __name__ == "__main__":
                         # 绑定合成视频事件
                         compose_video_btn.click(
                             handle_compose_video,
-                            inputs=[local_video_path_input, input_file, processing_state, STATE, audio_output],
+                            inputs=[video_file_upload, local_video_path_input, input_file, processing_state, STATE, audio_output],
                             outputs=[gen_textbox_output_text]
                         )
 
