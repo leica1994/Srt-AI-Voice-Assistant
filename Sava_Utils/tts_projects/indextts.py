@@ -1,9 +1,10 @@
-from . import TTSProjet
-import gradio as gr
-from .. import logger, i18n
-import requests
 import os
+
+import gradio as gr
 from gradio_client import Client, handle_file
+
+from . import TTSProjet
+from .. import logger, i18n
 
 current_path = os.environ.get("current_path")
 
