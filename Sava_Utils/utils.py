@@ -105,12 +105,93 @@ def file_show(files):
         return i18n('<Multiple Files>')
     else:
         file = files[0]
+
     try:
-        with open(file.name, "r", encoding="utf-8") as f:
-            text = f.read()
-        return text
+        file_ext = file.name[-4:].lower()
+
+        # 处理 ASS 文件
+        if file_ext == ".ass":
+            # 导入字幕处理器
+            from .subtitle_processor import format_ass_file, extract_ass_to_srt, get_available_styles
+            import tempfile
+            import os
+
+            # 创建临时目录
+            temp_dir = tempfile.mkdtemp()
+            formatted_ass_path = os.path.join(temp_dir, "formatted.ass")
+            srt_output_path = os.path.join(temp_dir, "converted.srt")
+
+            try:
+                # 1. 格式化 ASS 文件
+                format_success = format_ass_file(file.name, formatted_ass_path)
+                if not format_success:
+                    logger.warning("ASS 文件格式化失败，使用原文件")
+                    formatted_ass_path = file.name
+
+                # 2. 获取可用的样式
+                styles = get_available_styles(formatted_ass_path)
+                if not styles:
+                    logger.warning("未找到 ASS 样式，使用默认样式")
+                    style_name = "Default"
+                else:
+                    style_name = styles[0]  # 使用第一个样式
+
+                # 3. 转换为 SRT
+                convert_success = extract_ass_to_srt(formatted_ass_path, style_name, srt_output_path)
+                if convert_success and os.path.exists(srt_output_path):
+                    with open(srt_output_path, "r", encoding="utf-8") as f:
+                        text = f.read()
+                    return text
+                else:
+                    logger.error("ASS 转 SRT 失败")
+                    return "❌ ASS 文件处理失败"
+
+            finally:
+                # 清理临时文件
+                import shutil
+                try:
+                    shutil.rmtree(temp_dir)
+                except:
+                    pass
+
+        # 处理 VTT 文件
+        elif file_ext == ".vtt":
+            from .subtitle_processor import convert_subtitle
+            import tempfile
+            import os
+
+            # 创建临时 SRT 文件
+            temp_dir = tempfile.mkdtemp()
+            srt_output_path = os.path.join(temp_dir, "converted.srt")
+
+            try:
+                # 转换 VTT 为 SRT
+                convert_success = convert_subtitle(file.name, srt_output_path)
+                if convert_success and os.path.exists(srt_output_path):
+                    with open(srt_output_path, "r", encoding="utf-8") as f:
+                        text = f.read()
+                    return text
+                else:
+                    logger.error("VTT 转 SRT 失败")
+                    return "❌ VTT 文件处理失败"
+
+            finally:
+                # 清理临时文件
+                import shutil
+                try:
+                    shutil.rmtree(temp_dir)
+                except:
+                    pass
+
+        # 处理其他格式文件
+        else:
+            with open(file.name, "r", encoding="utf-8") as f:
+                text = f.read()
+            return text
+
     except Exception as error:
-        return error
+        logger.error(f"文件显示失败: {error}")
+        return str(error)
 
 
 from .subtitle import Base_subtitle, Subtitle, Subtitles
@@ -265,14 +346,22 @@ def modify_spkmap(map: dict, k: str, v: str):
 def read_file(file_name, fps=30, offset=0):
     if Sava_Utils.config.server_mode:
         assert os.stat(file_name).st_size < 65536, i18n('Error: File too large')  # 64KB
-    if file_name[-4:].lower() == ".csv":
+
+    file_ext = file_name[-4:].lower()
+
+    if file_ext == ".csv":
         subtitle_list = read_prcsv(file_name, fps, offset)
-    elif file_name[-4:].lower() == ".srt":
+    elif file_ext == ".srt":
         subtitle_list = read_srt(file_name, offset)
-    elif file_name[-4:].lower() == ".txt":
+    elif file_ext == ".txt":
         subtitle_list = read_txt(file_name)
+    elif file_ext == ".ass":
+        subtitle_list = read_ass_file(file_name, offset)
+    elif file_ext == ".vtt":
+        subtitle_list = read_vtt_file(file_name, offset)
     else:
         raise ValueError(i18n('Unknown format. Please ensure the extension name is correct!'))
+
     assert len(subtitle_list) != 0, "Empty file???"
     return subtitle_list
 
@@ -331,3 +420,90 @@ def remove_silence(audio, sr, padding_begin=0.1, padding_fin=0.15, threshold_db=
     cutting_point2 = min(j * hop_length + int(padding_fin * sr), audio.shape[-1])
     #print(audio.shape[-1],cutting_point1,cutting_point2)
     return audio[cutting_point1:cutting_point2]
+
+
+def read_ass_file(file_name, offset=0):
+    """读取 ASS 文件并转换为字幕列表"""
+    try:
+        from .subtitle_processor import format_ass_file, extract_ass_to_srt, get_available_styles
+        import tempfile
+        import os
+
+        # 创建临时目录
+        temp_dir = tempfile.mkdtemp()
+        formatted_ass_path = os.path.join(temp_dir, "formatted.ass")
+        srt_output_path = os.path.join(temp_dir, "converted.srt")
+
+        try:
+            # 1. 格式化 ASS 文件
+            format_success = format_ass_file(file_name, formatted_ass_path)
+            if not format_success:
+                logger.warning("ASS 文件格式化失败，使用原文件")
+                formatted_ass_path = file_name
+
+            # 2. 获取可用的样式
+            styles = get_available_styles(formatted_ass_path)
+            if not styles:
+                logger.warning("未找到 ASS 样式，使用默认样式")
+                style_name = "Default"
+            else:
+                style_name = styles[0]  # 使用第一个样式
+
+            # 3. 转换为 SRT
+            convert_success = extract_ass_to_srt(formatted_ass_path, style_name, srt_output_path)
+            if convert_success and os.path.exists(srt_output_path):
+                # 读取转换后的 SRT 文件
+                subtitle_list = read_srt(srt_output_path, offset)
+                return subtitle_list
+            else:
+                logger.error("ASS 转 SRT 失败")
+                raise ValueError("ASS 文件处理失败")
+
+        finally:
+            # 清理临时文件
+            import shutil
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+
+    except Exception as e:
+        err = f"{i18n('Failed to read ASS file')}: {str(e)}"
+        logger.error(err)
+        raise ValueError(err)
+
+
+def read_vtt_file(file_name, offset=0):
+    """读取 VTT 文件并转换为字幕列表"""
+    try:
+        from .subtitle_processor import convert_subtitle
+        import tempfile
+        import os
+
+        # 创建临时 SRT 文件
+        temp_dir = tempfile.mkdtemp()
+        srt_output_path = os.path.join(temp_dir, "converted.srt")
+
+        try:
+            # 转换 VTT 为 SRT
+            convert_success = convert_subtitle(file_name, srt_output_path)
+            if convert_success and os.path.exists(srt_output_path):
+                # 读取转换后的 SRT 文件
+                subtitle_list = read_srt(srt_output_path, offset)
+                return subtitle_list
+            else:
+                logger.error("VTT 转 SRT 失败")
+                raise ValueError("VTT 文件处理失败")
+
+        finally:
+            # 清理临时文件
+            import shutil
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+
+    except Exception as e:
+        err = f"{i18n('Failed to read VTT file')}: {str(e)}"
+        logger.error(err)
+        raise ValueError(err)

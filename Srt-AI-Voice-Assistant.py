@@ -46,6 +46,33 @@ INDEXTTS = Sava_Utils.tts_projects.indextts.IndexTTS(Sava_Utils.config)
 TRANSLATION_MODULE = Translation_module(Sava_Utils.config)
 POLYPHONE = Polyphone(Sava_Utils.config)
 Projet_dict = {"bv2": BV2, "gsv": GSV, "edgetts": EDGETTS, "indextts": INDEXTTS, "custom": CUSTOM}
+
+
+def get_output_dir_with_hash(base_content=""):
+    """
+    生成带 MD5 哈希的输出目录路径
+
+    Args:
+        base_content: 用于生成哈希的基础内容，如文件名、时间戳等
+
+    Returns:
+        str: SAVAdata/output/md5hash 格式的目录路径
+    """
+    # 生成哈希内容：基础内容 + 当前时间戳
+    hash_content = f"{base_content}_{datetime.datetime.now().isoformat()}"
+
+    # 生成 MD5 哈希
+    md5_hash = hashlib.md5(hash_content.encode('utf-8')).hexdigest()[:8]
+
+    # 返回完整的输出目录路径
+    output_dir = os.path.join(current_path, "SAVAdata", "output", md5_hash)
+
+    # 确保目录存在
+    os.makedirs(output_dir, exist_ok=True)
+
+    return output_dir
+
+
 componments = {
     1: [GSV, BV2, INDEXTTS, EDGETTS, CUSTOM],
     2: [TRANSLATION_MODULE, POLYPHONE],
@@ -60,6 +87,7 @@ def custom_api(text):
 def export_subtitle_with_new_name(file_list, subtitle_state):
     """
     导出字幕文件，基于原字幕文件名生成新的文件名
+    支持导出原格式（ASS/VTT）和 SRT 格式
 
     Args:
         file_list: 原始文件列表
@@ -72,50 +100,61 @@ def export_subtitle_with_new_name(file_list, subtitle_state):
         # 获取原始文件列表
         original_files = [i.name for i in file_list] if file_list else []
 
-        # 导出字幕文件
-        exported_file = subtitle_state.export()
+        exported_files = []
 
-        if exported_file:
-            # 如果有原始字幕文件，基于第一个文件名生成新名称
+        if original_files:
+            # 获取原始文件信息
+            original_file = original_files[0]
+            original_dir = os.path.dirname(original_file)
+            original_basename = Sava_Utils.utils.basename_no_ext(original_file)
+
+            # 如果原文件在output目录外，则使用带哈希的output目录
+            if "SAVAdata" not in original_dir or "output" not in original_dir:
+                # 生成带哈希的输出目录
+                hash_output_dir = get_output_dir_with_hash(original_basename)
+                # 指定导出路径，避免重复生成哈希目录
+                srt_filepath = os.path.join(hash_output_dir, f"{original_basename}.srt")
+                exported_srt_file = subtitle_state.export(fp=srt_filepath, open_explorer=False)
+            else:
+                # 使用原目录
+                srt_filepath = os.path.join(original_dir, f"{original_basename}.srt")
+                exported_srt_file = subtitle_state.export(fp=srt_filepath, open_explorer=False)
+        else:
+            # 没有原始文件，使用默认导出
+            exported_srt_file = subtitle_state.export(open_explorer=False)
+
+        if exported_srt_file:
+            exported_files.append(exported_srt_file)
+            print(f"✅ SRT 字幕文件已导出: {exported_srt_file}")
+
+            # 如果有原始文件，检查是否需要导出原格式
             if original_files:
                 original_file = original_files[0]
-                # 获取原文件的目录和基础名称
-                original_dir = os.path.dirname(original_file)
                 original_basename = Sava_Utils.utils.basename_no_ext(original_file)
+                original_ext = os.path.splitext(original_file)[1].lower()
 
-                new_filename = f"{original_basename}.srt"
-
-                # 如果原文件在output目录外，则放到output目录
-                if "SAVAdata" not in original_dir or "output" not in original_dir:
-                    new_filepath = os.path.join(current_path, "SAVAdata", "output", new_filename)
-                else:
-                    new_filepath = os.path.join(original_dir, new_filename)
-
-                # 如果新文件名与导出文件名不同，则重命名
-                if exported_file != new_filepath:
+                if original_ext in ['.ass', '.vtt']:
                     try:
-                        # 确保目标目录存在
-                        os.makedirs(os.path.dirname(new_filepath), exist_ok=True)
+                        original_format_file = export_original_format(
+                            original_file, exported_srt_file, original_basename, original_ext,
+                            os.path.dirname(exported_srt_file)
+                        )
+                        if original_format_file:
+                            exported_files.append(original_format_file)
+                            print(f"✅ {original_ext.upper()} 字幕文件已导出: {original_format_file}")
+                    except Exception as format_error:
+                        print(f"⚠️ 导出 {original_ext.upper()} 格式失败: {format_error}")
+                        gr.Warning(f"导出 {original_ext.upper()} 格式失败: {str(format_error)}")
 
-                        # 如果目标文件已存在，添加时间戳
-                        if os.path.exists(new_filepath):
-                            timestamp = datetime.datetime.now().strftime("_%Y%m%d_%H%M%S")
-                            name_part = Sava_Utils.utils.basename_no_ext(new_filepath)
-                            new_filepath = os.path.join(os.path.dirname(new_filepath), f"{name_part}{timestamp}.srt")
+            # 打开包含导出文件的目录
+            if not Sava_Utils.config.server_mode:
+                export_dir = os.path.dirname(exported_srt_file)
+                os.system(f'explorer /select, {exported_srt_file}')
 
-                        # 重命名文件
-                        shutil.move(exported_file, new_filepath)
-                        exported_file = new_filepath
-
-                        print(f"✅ 字幕文件已导出: {new_filepath}")
-                        gr.Info(f"字幕文件已导出: {os.path.basename(new_filepath)}")
-
-                    except Exception as e:
-                        print(f"⚠️ 重命名文件失败: {e}")
-                        gr.Warning(f"重命名文件失败，使用默认名称: {os.path.basename(exported_file)}")
+            gr.Info(f"字幕文件已导出: {len(exported_files)} 个文件")
 
             # 返回原始文件列表 + 新导出的文件
-            return original_files + [exported_file]
+            return original_files + exported_files
         else:
             # 如果导出失败，返回原始文件列表
             return original_files
@@ -124,6 +163,69 @@ def export_subtitle_with_new_name(file_list, subtitle_state):
         print(f"❌ 导出字幕文件失败: {e}")
         gr.Error(f"导出字幕文件失败: {str(e)}")
         return [i.name for i in file_list] if file_list else []
+
+
+def export_original_format(original_file, srt_file, base_name, original_ext, output_dir):
+    """
+    导出原格式的字幕文件（ASS 或 VTT）
+
+    Args:
+        original_file: 原始字幕文件路径
+        srt_file: 生成的 SRT 文件路径
+        base_name: 基础文件名（不含扩展名）
+        original_ext: 原始文件扩展名 (.ass 或 .vtt)
+        output_dir: 输出目录
+
+    Returns:
+        导出的原格式文件路径，失败时返回 None
+    """
+    try:
+        if original_ext == '.ass':
+            # 导出 ASS 格式
+            from Sava_Utils.subtitle_processor import sync_srt_timestamps_to_ass
+
+            output_ass_path = os.path.join(output_dir, f"{base_name}_final.ass")
+
+            # 如果目标文件已存在，添加时间戳
+            if os.path.exists(output_ass_path):
+                timestamp = datetime.datetime.now().strftime("_%Y%m%d_%H%M%S")
+                output_ass_path = os.path.join(output_dir, f"{base_name}_final{timestamp}.ass")
+
+            # 使用 sync_srt_timestamps_to_ass 同步时间戳
+            success = sync_srt_timestamps_to_ass(original_file, srt_file, output_ass_path)
+
+            if success and os.path.exists(output_ass_path):
+                return output_ass_path
+            else:
+                print(f"❌ ASS 文件同步失败")
+                return None
+
+        elif original_ext == '.vtt':
+            # 导出 VTT 格式
+            from Sava_Utils.subtitle_processor import convert_subtitle
+
+            output_vtt_path = os.path.join(output_dir, f"{base_name}_final.vtt")
+
+            # 如果目标文件已存在，添加时间戳
+            if os.path.exists(output_vtt_path):
+                timestamp = datetime.datetime.now().strftime("_%Y%m%d_%H%M%S")
+                output_vtt_path = os.path.join(output_dir, f"{base_name}_final{timestamp}.vtt")
+
+            # 使用 convert_subtitle 从 SRT 转换为 VTT
+            success = convert_subtitle(srt_file, output_vtt_path)
+
+            if success and os.path.exists(output_vtt_path):
+                return output_vtt_path
+            else:
+                print(f"❌ VTT 文件转换失败")
+                return None
+        else:
+            print(f"❌ 不支持的格式: {original_ext}")
+            return None
+
+    except Exception as e:
+        print(f"❌ 导出原格式文件失败: {e}")
+        return None
 
 
 # single speaker
@@ -520,7 +622,7 @@ if __name__ == "__main__":
                             offset = gr.Slider(minimum=-6, maximum=6, value=0, step=0.1,
                                                label=i18n('Voice time offset (seconds)'))
                         input_file = gr.File(label=i18n('Upload file (Batch mode only supports one speaker at a time)'),
-                                             file_types=['.csv', '.srt', '.txt'], file_count='multiple')
+                                             file_types=['.csv', '.srt', '.ass', '.vtt', '.txt'], file_count='multiple')
 
                         # 本地视频地址输入组件 - 优化样式
                         with gr.Group():
@@ -604,21 +706,24 @@ if __name__ == "__main__":
                                 return gr.update(
                                     value="⚠️ **请先上传字幕文件**\n\n📝 需要上传 .srt 字幕文件才能进行音频分割\n\n💡 请在上方的文件上传区域选择字幕文件"), current_state
 
-                            # 获取字幕文件路径
-                            srt_file = None
+                            # 获取字幕文件路径 - 支持多种格式
+                            subtitle_file = None
+                            supported_subtitle_formats = ['.srt', '.ass', '.vtt', '.csv', '.txt']
+
                             for file in uploaded_files:
-                                if file.name.lower().endswith('.srt'):
-                                    srt_file = file.name
+                                file_ext = os.path.splitext(file.name)[1].lower()
+                                if file_ext in supported_subtitle_formats:
+                                    subtitle_file = file.name
                                     break
 
-                            if not srt_file:
+                            if not subtitle_file:
                                 return gr.update(
-                                    value="⚠️ **未找到字幕文件**\n\n📝 上传的文件中没有 .srt 格式的字幕文件\n\n💡 请上传正确的字幕文件"), current_state
+                                    value="⚠️ **未找到字幕文件**\n\n📝 上传的文件中没有支持的字幕格式\n\n✅ 支持格式：SRT, ASS, VTT, CSV, TXT\n\n💡 请上传正确格式的字幕文件"), current_state
 
                             # 检查是否已经处理过相同的文件
                             if (current_state["processed"] and
                                     current_state["video_path"] == video_path and
-                                    current_state["srt_path"] == srt_file):
+                                    current_state["srt_path"] == subtitle_file):
                                 return gr.update(
                                     value="ℹ️ **文件已处理过**\n\n✅ 相同的视频和字幕文件已经处理过了\n\n💡 如需重新处理，请更换文件或重启程序"), current_state
 
@@ -634,7 +739,7 @@ if __name__ == "__main__":
                                 # 步骤1: 分离视频音频
                                 # 生成唯一的哈希目录名（基于视频路径和字幕路径）
 
-                                hash_input = f"{video_path}_{srt_file}_{time.time()}"
+                                hash_input = f"{video_path}_{subtitle_file}_{time.time()}"
                                 session_hash = hashlib.sha256(hash_input.encode()).hexdigest()
 
                                 # 使用项目标准的存储路径，包含哈希子目录
@@ -653,14 +758,47 @@ if __name__ == "__main__":
                                 # 步骤2: 根据字幕分割音频
                                 segments_dir = os.path.join(output_dir, "segments")
                                 os.makedirs(segments_dir, exist_ok=True)
-                                segments = audio_separator.split_audio_by_subtitles(vocal_audio_path, srt_file,
+
+                                # 处理字幕文件 - 如果是 ASS 或 VTT，先转换为 SRT
+                                subtitle_ext = os.path.splitext(subtitle_file)[1].lower()
+                                if subtitle_ext in ['.ass', '.vtt']:
+                                    # 需要转换为 SRT 格式进行分割
+                                    temp_srt_path = os.path.join(output_dir, "temp_subtitle.srt")
+
+                                    if subtitle_ext == '.ass':
+                                        # ASS 文件处理
+                                        from Sava_Utils.subtitle_processor import format_ass_file, extract_ass_to_srt, get_available_styles
+
+                                        # 格式化 ASS 文件
+                                        formatted_ass_path = os.path.join(output_dir, "formatted.ass")
+                                        format_success = format_ass_file(subtitle_file, formatted_ass_path)
+                                        if not format_success:
+                                            formatted_ass_path = subtitle_file
+
+                                        # 获取样式并转换
+                                        styles = get_available_styles(formatted_ass_path)
+                                        style_name = styles[0] if styles else "Default"
+                                        extract_ass_to_srt(formatted_ass_path, style_name, temp_srt_path)
+
+                                    elif subtitle_ext == '.vtt':
+                                        # VTT 文件处理
+                                        from Sava_Utils.subtitle_processor import convert_subtitle
+                                        convert_subtitle(subtitle_file, temp_srt_path)
+
+                                    # 使用转换后的 SRT 文件进行分割
+                                    split_subtitle_file = temp_srt_path
+                                else:
+                                    # 直接使用原文件
+                                    split_subtitle_file = subtitle_file
+
+                                segments = audio_separator.split_audio_by_subtitles(vocal_audio_path, split_subtitle_file,
                                                                                     segments_dir)
 
                                 # 更新处理状态，保存所有处理结果
                                 new_state = {
                                     "processed": True,
                                     "video_path": video_path,
-                                    "srt_path": srt_file,
+                                    "srt_path": subtitle_file,
                                     "processing_result": result,  # 保存完整的处理结果
                                     "session_hash": session_hash,
                                     "output_dir": output_dir
@@ -725,10 +863,16 @@ if __name__ == "__main__":
                                     value="❌ **字幕文件检查失败**\n\n📝 **错误**: 未上传字幕文件\n\n💡 **解决方案**: 请在左侧上传 .srt 格式的字幕文件")
 
                             # 检查字幕文件格式
-                            srt_files = [f for f in subtitle_files if f.name.lower().endswith('.srt')]
-                            if len(srt_files) == 0:
+                            supported_formats = ['.srt', '.ass', '.vtt', '.csv', '.txt']
+                            subtitle_files_filtered = []
+                            for f in subtitle_files:
+                                file_ext = os.path.splitext(f.name)[1].lower()
+                                if file_ext in supported_formats:
+                                    subtitle_files_filtered.append(f)
+
+                            if len(subtitle_files_filtered) == 0:
                                 return gr.update(
-                                    value="❌ **字幕文件格式错误**\n\n📝 **错误**: 上传的文件中没有 .srt 格式的字幕文件\n\n💡 **解决方案**: 请上传正确的 .srt 字幕文件")
+                                    value="❌ **字幕文件格式错误**\n\n📝 **错误**: 上传的文件中没有支持的字幕格式\n\n✅ **支持格式**: SRT, ASS, VTT, CSV, TXT\n\n💡 **解决方案**: 请上传正确格式的字幕文件")
 
                             # 2. 检查视频是否加载过
                             if not video_path or video_path.strip() == "":
@@ -782,20 +926,72 @@ if __name__ == "__main__":
                                 temp_dir = os.path.join(current_path, "SAVAdata", "temp", "video_compose")
                                 os.makedirs(temp_dir, exist_ok=True)
 
-                                # 创建输出目录用于最终文件
-                                output_dir = os.path.join(current_path, "SAVAdata", "output")
-                                os.makedirs(output_dir, exist_ok=True)
+                                # 检查是否已经有音频生成的哈希目录
+                                project_name = subtitles_state.dir if subtitles_state.dir else "video_compose"
+                                existing_output_dir = os.environ.get("current_output_dir")
+
+                                if existing_output_dir and os.path.exists(existing_output_dir):
+                                    # 使用音频合成时创建的哈希目录
+                                    output_dir = existing_output_dir
+                                    print(f"🔄 使用现有输出目录: {output_dir}")
+                                else:
+                                    # 创建新的哈希目录
+                                    output_dir = get_output_dir_with_hash(f"video_compose_{project_name}")
+                                    os.environ["current_output_dir"] = output_dir
+                                    print(f"🆕 创建新输出目录: {output_dir}")
 
                                 # 生成基于项目名称的文件名
                                 project_name = subtitles_state.dir if subtitles_state.dir else "video_compose"
 
                                 # 导出原始字幕到临时目录（用于视频处理）
                                 original_srt_path = os.path.join(temp_dir, "original.srt")
-                                shutil.copy2(srt_files[0].name, original_srt_path)
+
+                                # 检查原始字幕文件格式，如果是 ASS 或 VTT，需要先转换为 SRT
+                                original_subtitle_file = subtitle_files_filtered[0].name
+                                original_ext = os.path.splitext(original_subtitle_file)[1].lower()
+
+                                if original_ext == '.ass':
+                                    # ASS 文件转换为 SRT
+                                    from Sava_Utils.subtitle_processor import format_ass_file, extract_ass_to_srt, get_available_styles
+
+                                    # 格式化 ASS 文件
+                                    formatted_ass_path = os.path.join(temp_dir, "formatted_original.ass")
+                                    format_success = format_ass_file(original_subtitle_file, formatted_ass_path)
+                                    if not format_success:
+                                        formatted_ass_path = original_subtitle_file
+
+                                    # 获取样式并转换
+                                    styles = get_available_styles(formatted_ass_path)
+                                    style_name = styles[0] if styles else "Default"
+                                    extract_ass_to_srt(formatted_ass_path, style_name, original_srt_path)
+
+                                elif original_ext == '.vtt':
+                                    # VTT 文件转换为 SRT
+                                    from Sava_Utils.subtitle_processor import convert_subtitle
+                                    convert_subtitle(original_subtitle_file, original_srt_path)
+
+                                else:
+                                    # SRT、CSV、TXT 文件直接复制
+                                    shutil.copy2(original_subtitle_file, original_srt_path)
 
                                 # 导出新字幕到输出目录（最终输出文件）
                                 new_srt_path = os.path.join(output_dir, f"{project_name}_final.srt")
                                 subtitles_state.export(fp=new_srt_path, open_explorer=False)
+
+                                # 如果原始文件是 ASS 或 VTT，也导出原格式的字幕文件
+                                original_subtitle_file = subtitle_files_filtered[0].name
+                                original_ext = os.path.splitext(original_subtitle_file)[1].lower()
+
+                                if original_ext in ['.ass', '.vtt']:
+                                    try:
+                                        original_format_file = export_original_format(
+                                            original_subtitle_file, new_srt_path, project_name, original_ext, output_dir
+                                        )
+                                        if original_format_file:
+                                            print(f"✅ {original_ext.upper()} 字幕文件已生成: {original_format_file}")
+                                    except Exception as format_error:
+                                        print(f"⚠️ 生成 {original_ext.upper()} 格式失败: {format_error}")
+                                        gr.Warning(f"生成 {original_ext.upper()} 格式失败: {str(format_error)}")
 
                                 # 步骤2: 获取无声视频路径
                                 # 从processing_state中获取处理后的视频路径
@@ -828,15 +1024,24 @@ if __name__ == "__main__":
                                 speed_adjusted_video = speed_result['output_path']
 
                                 # 步骤4: 获取生成的音频文件路径
-                                audio_file_path = os.path.join(current_path, "SAVAdata", "output",
-                                                               f"{subtitles_state.dir}.wav")
+                                # 优先使用环境变量中保存的音频路径
+                                audio_file_path = os.environ.get("current_audio_path")
 
+                                # 如果环境变量中没有，则尝试在哈希目录中查找
+                                if not audio_file_path or not os.path.exists(audio_file_path):
+                                    audio_file_path = os.path.join(output_dir, f"{project_name}.wav")
+
+                                # 如果还是找不到，尝试在旧的输出目录中查找
                                 if not os.path.exists(audio_file_path):
-                                    return gr.update(value="❌ **音频文件不存在**\n\n🎵 **错误**: 找不到生成的音频文件")
+                                    fallback_audio_path = os.path.join(current_path, "SAVAdata", "output", f"{project_name}.wav")
+                                    if os.path.exists(fallback_audio_path):
+                                        audio_file_path = fallback_audio_path
+                                    else:
+                                        return gr.update(value="❌ **音频文件不存在**\n\n🎵 **错误**: 找不到生成的音频文件\n\n💡 **建议**: 请先完成音频合成")
 
                                 # 步骤5: 合成变速视频与音频
-                                output_video_path = os.path.join(current_path, "SAVAdata", "output",
-                                                                 f"{subtitles_state.dir}_final.mp4")
+                                # 使用与字幕相同的哈希输出目录
+                                output_video_path = os.path.join(output_dir, f"{project_name}_final.mp4")
 
                                 final_video = merge_video_with_audio(
                                     video_path=speed_adjusted_video,

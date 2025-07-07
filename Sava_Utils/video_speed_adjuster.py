@@ -43,7 +43,10 @@ class VideoSpeedAdjuster:
         self.gpu_encoder = self._detect_gpu_encoder() if use_gpu else None
 
         print(f"🚀 VideoSpeedAdjuster initialized")
-        print(f"📁 Output: {self.output_dir}")
+        if hasattr(self, 'output_dir'):
+            print(f"📁 Output: {self.output_dir}")
+        else:
+            print(f"📁 Output: Not specified")
         print(f"⚡ Workers: {self.max_workers}")
         if self.gpu_encoder:
             print(f"🎮 GPU: {self.gpu_encoder}")
@@ -818,5 +821,7 @@ def merge_video_with_audio(video_path: str, audio_path: str, output_path: str,
     Returns:
         str: 输出文件路径
     """
-    with VideoSpeedAdjuster(use_gpu=use_gpu) as adjuster:
+    # 从输出路径获取输出目录
+    output_dir = os.path.dirname(output_path)
+    with VideoSpeedAdjuster(output_dir=output_dir, use_gpu=use_gpu) as adjuster:
         return adjuster.merge_video_audio(video_path, audio_path, output_path, sync_to_audio)

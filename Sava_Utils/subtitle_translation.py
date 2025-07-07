@@ -1,3 +1,6 @@
+import datetime
+import hashlib
+
 import gradio as gr
 import os
 import copy
@@ -44,7 +47,13 @@ def start_translation(in_files, language: str, batch_size: float, merge: bool, o
                 if Sava_Utils.config.server_mode:
                     output_path = os.path.join(os.path.dirname(in_file.name), f"{basename_no_ext(in_file.name)}_translated_to_{language}.srt")
                 else:
-                    output_path = os.path.join(output_dir, f"{basename_no_ext(in_file.name)}_translated_to_{language}.srt")
+                    # 生成带哈希的输出目录
+                    base_name = basename_no_ext(in_file.name)
+                    hash_content = f"translation_{base_name}_{language}_{datetime.datetime.now().isoformat()}"
+                    md5_hash = hashlib.md5(hash_content.encode('utf-8')).hexdigest()[:8]
+                    hash_output_dir = os.path.join(output_dir, md5_hash)
+                    os.makedirs(hash_output_dir, exist_ok=True)
+                    output_path = os.path.join(hash_output_dir, f"{base_name}_translated_to_{language}.srt")
                 subtitle_list_tr.export(fp=output_path, open_explorer=False, raw=True)
                 output_list.append(output_path)
                 if merge:
