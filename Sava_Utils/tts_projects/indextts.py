@@ -1,7 +1,6 @@
 from . import TTSProjet
 import gradio as gr
 from .. import logger, i18n
-from ..utils import positive_int
 import requests
 import os
 from gradio_client import Client, handle_file
@@ -62,13 +61,15 @@ class IndexTTS(TTSProjet):
             # 如果都不存在，返回None
             return None
 
-    def api(self, port, text, reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k,
+    def api(self, api_url, text, reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k,
             top_p, temperature,
             num_beams, repetition_penalty, length_penalty, max_mel_tokens,
             max_text_tokens_per_sentence, sentences_bucket_max_size, infer_mode):
         """调用Index-TTS API"""
         try:
-            api_url = f'http://127.0.0.1:{port}'
+            # 确保 API URL 格式正确
+            if not api_url.startswith('http://') and not api_url.startswith('https://'):
+                api_url = f'http://{api_url}'
 
             # 创建Gradio客户端
             client = Client(api_url, httpx_kwargs={"timeout": 7200, "proxy": None}, ssl_verify=False)
@@ -174,11 +175,10 @@ class IndexTTS(TTSProjet):
 
     def save_action(self, *args, text: str = None):
         """保存操作，调用API并返回音频数据"""
-        reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k, top_p, temperature, num_beams, repetition_penalty, length_penalty, max_mel_tokens, max_text_tokens_per_sentence, sentences_bucket_max_size, infer_mode, port = args
-        port = positive_int(port)
+        reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k, top_p, temperature, num_beams, repetition_penalty, length_penalty, max_mel_tokens, max_text_tokens_per_sentence, sentences_bucket_max_size, infer_mode, api_url = args
 
         audio = self.api(
-            port=port,
+            api_url=api_url,
             text=text,
             reference_audio=reference_audio,
             mode_selection=mode_selection,
@@ -255,106 +255,126 @@ class IndexTTS(TTSProjet):
                     interactive=True
                 )
 
-                with gr.Accordion("高级合成参数", open=False):
-                    # 第一行 - 是否进行采样
-                    with gr.Row():
-                        self.do_sample = gr.Checkbox(
-                            label="是否进行采样",
-                            value=True,
-                            interactive=True
-                        )
-                        self.temperature = gr.Slider(
-                            minimum=0.1,
-                            maximum=2.0,
-                            step=0.1,
-                            value=1.0,
-                            label="temperature"
-                        )
+                with gr.Accordion("🔧 高级合成参数", open=False):
+                    # 采样设置组
+                    with gr.Group():
+                        gr.Markdown("#### 🎯 采样控制")
+                        with gr.Row():
+                            self.do_sample = gr.Checkbox(
+                                label="启用采样",
+                                value=True,
+                                interactive=True,
+                                info="开启后使用随机采样，关闭则使用贪心搜索"
+                            )
+                            self.temperature = gr.Slider(
+                                minimum=0.1,
+                                maximum=2.0,
+                                step=0.1,
+                                value=1.0,
+                                label="Temperature",
+                                info="控制生成的随机性，值越高越随机"
+                            )
 
-                    # 第二行 - top_p, top_k, num_beams
-                    with gr.Row():
-                        self.top_p = gr.Slider(
-                            minimum=0,
-                            maximum=1,
-                            step=0.01,
-                            value=0.8,
-                            label="top_p"
-                        )
-                        self.top_k = gr.Slider(
-                            minimum=0,
-                            maximum=100,
-                            step=1,
-                            value=30,
-                            label="top_k"
-                        )
-                        self.num_beams = gr.Slider(
-                            minimum=1,
-                            maximum=10,
-                            step=1,
-                            value=3,
-                            label="num_beams"
-                        )
+                    # 生成策略组
+                    with gr.Group():
+                        gr.Markdown("#### 🎲 生成策略")
+                        with gr.Row():
+                            self.top_p = gr.Slider(
+                                minimum=0,
+                                maximum=1,
+                                step=0.01,
+                                value=0.8,
+                                label="Top-P",
+                                info="核采样概率阈值，控制词汇选择范围"
+                            )
+                            self.top_k = gr.Slider(
+                                minimum=0,
+                                maximum=100,
+                                step=1,
+                                value=30,
+                                label="Top-K",
+                                info="保留概率最高的K个词汇"
+                            )
+                            self.num_beams = gr.Slider(
+                                minimum=1,
+                                maximum=10,
+                                step=1,
+                                value=3,
+                                label="Beam Size",
+                                info="束搜索大小，值越大质量越高但速度越慢"
+                            )
 
-                    # 第三行 - repetition_penalty 和 length_penalty
-                    with gr.Row():
-                        self.repetition_penalty = gr.Number(
-                            label="repetition_penalty",
-                            value=10,
-                            precision=1,
-                            interactive=True
-                        )
-                        self.length_penalty = gr.Number(
-                            label="length_penalty",
-                            value=0,
-                            precision=1,
-                            interactive=True
-                        )
+                    # 惩罚机制组
+                    with gr.Group():
+                        gr.Markdown("#### ⚖️ 惩罚机制")
+                        with gr.Row():
+                            self.repetition_penalty = gr.Slider(
+                                minimum=1.0,
+                                maximum=20.0,
+                                step=0.1,
+                                value=10.0,
+                                label="重复惩罚",
+                                info="防止重复生成，值越大惩罚越重"
+                            )
+                            self.length_penalty = gr.Slider(
+                                minimum=-2.0,
+                                maximum=2.0,
+                                step=0.1,
+                                value=0.0,
+                                label="长度惩罚",
+                                info="控制生成长度，正值偏好长句，负值偏好短句"
+                            )
 
-                    # 第四行 - max_mel_tokens
-                    with gr.Row():
+                    # 音频生成控制组
+                    with gr.Group():
+                        gr.Markdown("#### 🎵 音频生成控制")
                         self.max_mel_tokens = gr.Slider(
                             minimum=50,
                             maximum=800,
                             step=10,
                             value=600,
-                            label="max_mel_tokens",
-                            info="生成Token最大数量，过小导致音频被截断"
+                            label="最大音频Token数",
+                            info="控制生成音频的最大长度，过小会导致音频被截断",
+                            elem_classes=["full-width-slider"]
                         )
 
-                    # 分句设置 - 参数会影响音频质量和生成速度
-                    gr.Markdown("### 分句设置 *参数会影响音频质量和生成速度*")
-                    with gr.Row():
-                        self.max_text_tokens_per_sentence = gr.Slider(
-                            minimum=20,
-                            maximum=600,
-                            step=10,
-                            value=120,
-                            label="分句最大Token数",
-                            info="建议20~300之间，值越大，单次分句越长，过小大幅增加推理次数导致速度最慢"
-                        )
-                        self.sentences_bucket_max_size = gr.Slider(
-                            minimum=1,
-                            maximum=16,
-                            step=1,
-                            value=4,
-                            label="分句分桶最大容量(批次推理主效)",
-                            info="建议2~8之间，值越大，一批次推理的分句数量越多，过大可能导致显存溢出"
-                        )
+                    # 分句处理组
+                    with gr.Group():
+                        gr.Markdown("#### 📝 分句处理 *影响音频质量和生成速度*")
+                        with gr.Row():
+                            self.max_text_tokens_per_sentence = gr.Slider(
+                                minimum=20,
+                                maximum=600,
+                                step=10,
+                                value=120,
+                                label="单句最大Token数",
+                                info="推荐 20-300，值越大单次处理越长，过小会增加推理次数"
+                            )
+                            self.sentences_bucket_max_size = gr.Slider(
+                                minimum=1,
+                                maximum=16,
+                                step=1,
+                                value=4,
+                                label="批次处理容量",
+                                info="推荐 2-8，值越大批次越大，过大可能显存溢出"
+                            )
 
-                    # 推理模式
-                    with gr.Row():
+                    # 推理模式组
+                    with gr.Group():
+                        gr.Markdown("#### 🚀 推理模式")
                         self.infer_mode = gr.Radio(
-                            label="Inference Mode",
+                            label="选择推理模式",
                             choices=["普通推理", "批次推理"],
                             value="普通推理",
-                            interactive=True
+                            interactive=True,
+                            info="批次推理速度更快但占用更多显存"
                         )
 
-                # API端口
-                self.api_port5 = gr.Number(
-                    label="API Port",
-                    value=7860,
-                    precision=0,
+                # API服务地址
+                self.api_url = gr.Textbox(
+                    label="服务地址",
+                    value="http://127.0.0.1:7860",
+                    placeholder="请输入Index-TTS服务地址，如: http://127.0.0.1:7860",
                     interactive=True
                 )
 
@@ -432,7 +452,7 @@ class IndexTTS(TTSProjet):
             self.max_text_tokens_per_sentence,
             self.sentences_bucket_max_size,
             self.infer_mode,
-            self.api_port5
+            self.api_url
         ]
         return INDEXTTS_ARGS
 
