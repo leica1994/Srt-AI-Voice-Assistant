@@ -497,7 +497,6 @@ def save(args, proj: str = None, dir: str = None, subtitle: Subtitle = None):
         return None
 
 
-
 def start_gsv():
     if Sava_Utils.config.gsv_pydir == "":
         gr.Warning(i18n(
@@ -728,7 +727,8 @@ if __name__ == "__main__":
                                 with gr.TabItem("📁 选择文件"):
                                     video_file_upload = gr.File(
                                         label="选择视频文件",
-                                        file_types=['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.ts'],
+                                        file_types=['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v',
+                                                    '.3gp', '.ts'],
                                         type="filepath"
                                     )
                                 with gr.TabItem("📝 输入路径"):
@@ -777,7 +777,9 @@ if __name__ == "__main__":
 
                         # 视频文件加载处理函数
                         def handle_video_file_load(video_file_upload, video_path_input, uploaded_files, current_state):
-                            """处理视频文件加载和音频分离 - 支持文件选择和路径输入"""
+                            """处理视频文件加载和音频分离 - 支持文件选择和路径输入，支持缓存机制"""
+                            import json
+                            import time
 
                             # 确定视频文件路径
                             video_path = None
@@ -834,7 +836,95 @@ if __name__ == "__main__":
                                 return gr.update(
                                     value="⚠️ **未找到字幕文件**\n\n📝 上传的文件中没有支持的字幕格式\n\n✅ 支持格式：SRT, ASS, VTT, CSV, TXT\n\n💡 请上传正确格式的字幕文件"), current_state
 
-                            # 检查是否已经处理过相同的文件
+                            # 生成workspace名称用于缓存检查
+                            video_basename = os.path.basename(video_path)
+                            workspace_name = video_basename.replace(".", "-")
+                            if workspace_name.endswith("-"):
+                                workspace_name = workspace_name[:-1]
+
+                            # 检查缓存文件
+                            def check_cache_file(video_path, subtitle_file, workspace_name):
+                                """检查是否存在有效的缓存文件"""
+                                try:
+                                    cache_dir = os.path.join(current_path, "SAVAdata", "temp", "audio_processing",
+                                                             workspace_name)
+                                    cache_file = os.path.join(cache_dir, "processing_cache.json")
+
+                                    if not os.path.exists(cache_file):
+                                        return None
+
+                                    with open(cache_file, 'r', encoding='utf-8') as f:
+                                        cache_data = json.load(f)
+
+                                    # 检查文件路径和文件大小是否匹配
+                                    if (cache_data.get('video_path') == video_path and
+                                            cache_data.get('subtitle_path') == subtitle_file):
+
+                                        # 检查文件大小
+                                        video_size = os.path.getsize(video_path)
+                                        subtitle_size = os.path.getsize(subtitle_file)
+
+                                        if (cache_data.get('video_size', 0) == video_size and
+                                                cache_data.get('subtitle_size', 0) == subtitle_size):
+
+                                            # 检查所有输出文件是否存在
+                                            result_files = cache_data.get('processing_result', {})
+                                            for file_path in result_files.values():
+                                                if file_path and not os.path.exists(file_path):
+                                                    return None
+
+                                            return cache_data
+
+                                    return None
+                                except Exception as e:
+                                    print(f"缓存检查失败: {e}")
+                                    return None
+
+                            # 尝试从缓存加载
+                            cache_data = check_cache_file(video_path, subtitle_file, workspace_name)
+                            print(f"Cache data: {video_path},  {subtitle_file},{workspace_name}")
+                            if cache_data:
+                                # 从缓存恢复环境变量
+                                if cache_data.get('env_vars'):
+                                    for key, value in cache_data['env_vars'].items():
+                                        os.environ[key] = value
+
+                                # 恢复处理状态
+                                cached_state = {
+                                    "processed": True,
+                                    "video_path": video_path,
+                                    "srt_path": subtitle_file,
+                                    "processing_result": cache_data.get('processing_result', {}),
+                                    "workspace_name": workspace_name,
+                                    "output_dir": cache_data.get('output_dir', '')
+                                }
+
+                                # 显示缓存加载成功信息
+                                result_files = cache_data.get('processing_result', {})
+                                segments_count = cache_data.get('segments_count', 0)
+
+                                success_message = f"""
+🚀 **从缓存快速加载！**
+
+✅ **处理结果**（已缓存）
+• 🎬 无声视频: `{os.path.basename(result_files.get('raw_video', 'N/A'))}`
+• 🎵 原始音频: `{os.path.basename(result_files.get('raw_audio', 'N/A'))}`
+• 🎤 人声音频: `{os.path.basename(result_files.get('vocal_audio', 'N/A'))}`
+• 🎼 背景音乐: `{os.path.basename(result_files.get('background_audio', 'N/A'))}`
+• ✂️ 音频片段: **{segments_count} 个片段**
+
+📂 **存储位置**
+• 🎬 项目目录: `SAVAdata/temp/audio_processing/{workspace_name}/`
+• ✂️ 音频片段: `SAVAdata/temp/audio_processing/{workspace_name}/segments/`
+
+🏷️ **项目名称**: `{workspace_name}`
+
+⚡ 文件已从缓存快速加载，无需重新处理！
+                                """.strip()
+
+                                return gr.update(value=success_message), cached_state
+
+                            # 检查是否已经处理过相同的文件（保留原有逻辑作为备用）
                             if (current_state["processed"] and
                                     current_state["video_path"] == video_path and
                                     current_state["srt_path"] == subtitle_file):
@@ -851,15 +941,7 @@ if __name__ == "__main__":
                                 sys.path.insert(0, 'Sava_Utils')
 
                                 # 步骤1: 分离视频音频
-                                # 生成基于workspace名称的目录
-                                video_basename = os.path.basename(video_path)
-
-                                # 使用视频文件名作为workspace名称，保持与其他目录一致的命名方式
-                                # 将点替换为短横线，保留格式信息（如 xxx.mp4 -> xxx-mp4）
-                                workspace_name = video_basename.replace(".", "-")
-                                # 如果以短横线结尾，去掉最后的短横线（避免 xxx-mp4- 这种情况）
-                                if workspace_name.endswith("-"):
-                                    workspace_name = workspace_name[:-1]
+                                # workspace_name 已在缓存检查部分生成，这里直接使用
 
                                 # 使用项目标准的存储路径，包含workspace名称子目录
                                 base_temp_dir = os.path.join(current_path, "SAVAdata", "temp")
@@ -886,7 +968,8 @@ if __name__ == "__main__":
 
                                     if subtitle_ext == '.ass':
                                         # ASS 文件处理
-                                        from Sava_Utils.subtitle_processor import format_ass_file, extract_ass_to_srt, get_available_styles
+                                        from Sava_Utils.subtitle_processor import format_ass_file, extract_ass_to_srt, \
+                                            get_available_styles
 
                                         # 格式化 ASS 文件
                                         formatted_ass_path = os.path.join(output_dir, "formatted.ass")
@@ -910,11 +993,47 @@ if __name__ == "__main__":
                                     # 直接使用原文件
                                     split_subtitle_file = subtitle_file
 
-                                segments = audio_separator.split_audio_by_subtitles(vocal_audio_path, split_subtitle_file,
+                                segments = audio_separator.split_audio_by_subtitles(vocal_audio_path,
+                                                                                    split_subtitle_file,
                                                                                     segments_dir)
 
                                 # 设置环境变量供 Clone 模式使用
                                 os.environ["current_video_path"] = video_path
+
+                                # 保存缓存文件
+                                def save_cache_file(video_path, subtitle_file, workspace_name, output_dir, result,
+                                                    segments_count):
+                                    """保存处理结果到缓存文件"""
+                                    try:
+                                        cache_file = os.path.join(output_dir, "processing_cache.json")
+
+                                        cache_data = {
+                                            "video_path": video_path,
+                                            "subtitle_path": subtitle_file,
+                                            "video_size": os.path.getsize(video_path),
+                                            "subtitle_size": os.path.getsize(subtitle_file),
+                                            "workspace_name": workspace_name,
+                                            "output_dir": output_dir,
+                                            "processing_result": result,
+                                            "segments_count": segments_count,
+                                            "env_vars": {
+                                                "current_video_path": video_path
+                                            },
+                                            "created_time": time.time(),
+                                            "created_time_str": time.strftime('%Y-%m-%d %H:%M:%S')
+                                        }
+
+                                        with open(cache_file, 'w', encoding='utf-8') as f:
+                                            json.dump(cache_data, f, ensure_ascii=False, indent=2)
+
+                                        print(f"✅ 缓存文件已保存: {cache_file}")
+
+                                    except Exception as e:
+                                        print(f"⚠️ 缓存保存失败: {e}")
+
+                                # 保存处理结果到缓存
+                                save_cache_file(video_path, subtitle_file, workspace_name, output_dir, result,
+                                                len(segments))
 
                                 # 更新处理状态，保存所有处理结果
                                 new_state = {
@@ -944,6 +1063,7 @@ if __name__ == "__main__":
 🏷️ **项目名称**: `{workspace_name}`
 
 🎯 文件已按项目名称组织保存，便于管理和查找！
+💾 处理结果已缓存，下次加载相同文件将快速恢复！
                                 """.strip()
 
                                 return gr.update(value=success_message), new_state
@@ -975,7 +1095,8 @@ if __name__ == "__main__":
 
 
                         # 合成视频处理函数
-                        def handle_compose_video(progress, video_file_upload, video_path_input, subtitle_files, current_state, subtitles_state,
+                        def handle_compose_video(progress, video_file_upload, video_path_input, subtitle_files,
+                                                 current_state, subtitles_state,
                                                  audio_data):
                             """处理视频合成 - 完整检查版本，支持进度条显示"""
 
@@ -1087,7 +1208,8 @@ if __name__ == "__main__":
 
                                 if original_ext == '.ass':
                                     # ASS 文件转换为 SRT
-                                    from Sava_Utils.subtitle_processor import format_ass_file, extract_ass_to_srt, get_available_styles
+                                    from Sava_Utils.subtitle_processor import format_ass_file, extract_ass_to_srt, \
+                                        get_available_styles
 
                                     # 格式化 ASS 文件
                                     formatted_ass_path = os.path.join(temp_dir, "formatted_original.ass")
@@ -1124,7 +1246,8 @@ if __name__ == "__main__":
                                             original_subtitle_file, new_srt_path, project_name, original_ext, output_dir
                                         )
                                         if original_format_file:
-                                            print(f"✅ {original_ext.upper()} 字幕文件已基于最终SRT重新生成: {original_format_file}")
+                                            print(
+                                                f"✅ {original_ext.upper()} 字幕文件已基于最终SRT重新生成: {original_format_file}")
                                         else:
                                             print(f"❌ {original_ext.upper()} 格式文件生成失败")
                                     except Exception as format_error:
@@ -1180,11 +1303,13 @@ if __name__ == "__main__":
 
                                 # 如果还是找不到，尝试在旧的输出目录中查找
                                 if not os.path.exists(audio_file_path):
-                                    fallback_audio_path = os.path.join(current_path, "SAVAdata", "output", f"{project_name}.wav")
+                                    fallback_audio_path = os.path.join(current_path, "SAVAdata", "output",
+                                                                       f"{project_name}.wav")
                                     if os.path.exists(fallback_audio_path):
                                         audio_file_path = fallback_audio_path
                                     else:
-                                        return gr.update(value="❌ **音频文件不存在**\n\n🎵 **错误**: 找不到生成的音频文件\n\n💡 **建议**: 请先完成音频合成")
+                                        return gr.update(
+                                            value="❌ **音频文件不存在**\n\n🎵 **错误**: 找不到生成的音频文件\n\n💡 **建议**: 请先完成音频合成")
 
                                 # 步骤5: 合成变速视频与音频
                                 progress(0.80, desc="正在合成视频和音频...")
@@ -1257,7 +1382,8 @@ if __name__ == "__main__":
                         # 绑定合成视频事件（添加进度条支持）
                         compose_video_btn.click(
                             lambda progress=gr.Progress(track_tqdm=True), *args: handle_compose_video(progress, *args),
-                            inputs=[video_file_upload, local_video_path_input, input_file, processing_state, STATE, audio_output],
+                            inputs=[video_file_upload, local_video_path_input, input_file, processing_state, STATE,
+                                    audio_output],
                             outputs=[gen_textbox_output_text]
                         )
 
@@ -1444,7 +1570,6 @@ if __name__ == "__main__":
                         apply_btn.click(apply_spk, inputs=[speaker_list, page_slider, STATE, *edit_check_list,
                                                            *edit_real_index_list],
                                         outputs=[*edit_check_list, *edit_rows])
-
 
                         save_spk_btn_gsv = gr.Button(value="💾", min_width=60, scale=0, visible=True)
                         save_spk_btn_gsv.click(lambda *args: save_spk(*args, project="gsv"),
