@@ -203,30 +203,32 @@ class Subtitles:
         audio_content = np.concatenate(audiolist)
         self.dump()
 
-        # 生成统一的哈希目录
-        import hashlib
+        # 生成基于workspace名称的目录
         import datetime
 
-        # 使用项目名称和当前时间生成稳定的哈希
+        # 使用项目名称（workspace名称）
         project_name = self.dir if self.dir else datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
-        # 检查是否已经有现有的哈希目录（来自视频合成或之前的音频合成）
+        # 检查是否已经有现有的输出目录（来自视频合成或之前的音频合成）
         existing_output_dir = os.environ.get("current_output_dir")
 
         if existing_output_dir and os.path.exists(existing_output_dir):
-            # 使用现有的哈希目录
+            # 使用现有的输出目录
             output_dir = existing_output_dir
             print(f"🔄 使用现有输出目录: {output_dir}")
         else:
-            # 生成新的哈希目录
-            hash_content = f"audio_{project_name}_{datetime.datetime.now().isoformat()}"
-            md5_hash = hashlib.md5(hash_content.encode('utf-8')).hexdigest()[:8]
-            output_dir = os.path.join(current_path, "SAVAdata", "output", md5_hash)
+            # 生成新的基于workspace名称的目录
+            output_dir = os.path.join(current_path, "SAVAdata", "output", project_name)
             os.makedirs(output_dir, exist_ok=True)
 
             # 保存输出目录到环境变量，供后续使用
             os.environ["current_output_dir"] = output_dir
             print(f"🆕 创建新输出目录: {output_dir}")
+
+        # 同时创建对应的temp/audio_processing目录
+        audio_processing_dir = os.path.join(current_path, "SAVAdata", "temp", "audio_processing", project_name)
+        os.makedirs(audio_processing_dir, exist_ok=True)
+        print(f"📁 创建音频处理目录: {audio_processing_dir}")
 
         # 保存音频文件到哈希目录
         audio_file_path = os.path.join(output_dir, f"{project_name}.wav")
@@ -300,11 +302,10 @@ class Subtitles:
                 srt_content.append(i.text + "\n")
             srt_content.append("\n")
         if fp is None:
-            # 生成带哈希的输出目录
+            # 生成基于workspace名称的输出目录
+            import datetime
             dir_name = self.dir if self.dir else datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-            hash_content = f"{dir_name}_{datetime.datetime.now().isoformat()}"
-            md5_hash = hashlib.md5(hash_content.encode('utf-8')).hexdigest()[:8]
-            output_dir = os.path.join(current_path, "SAVAdata", "output", md5_hash)
+            output_dir = os.path.join(current_path, "SAVAdata", "output", dir_name)
             os.makedirs(output_dir, exist_ok=True)
             file_path = os.path.join(output_dir, f"{dir_name}.srt")
         else:

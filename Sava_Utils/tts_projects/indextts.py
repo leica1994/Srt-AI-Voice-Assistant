@@ -93,13 +93,13 @@ class IndexTTS(TTSProjet):
             current_path = os.environ.get("current_path", ".")
             segments_dir = None
 
-            # 查找segments目录（实际结构: SAVAdata/temp/audio_processing/{hash}/segments）
+            # 查找segments目录（新结构: SAVAdata/temp/audio_processing/{workspace_name}/segments）
             audio_processing_base = os.path.join(current_path, "SAVAdata", "temp", "audio_processing")
             if os.path.exists(audio_processing_base):
-                for hash_dir in os.listdir(audio_processing_base):
-                    hash_dir_path = os.path.join(audio_processing_base, hash_dir)
-                    if os.path.isdir(hash_dir_path):
-                        segments_path = os.path.join(hash_dir_path, "segments")
+                for workspace_dir in os.listdir(audio_processing_base):
+                    workspace_dir_path = os.path.join(audio_processing_base, workspace_dir)
+                    if os.path.isdir(workspace_dir_path):
+                        segments_path = os.path.join(workspace_dir_path, "segments")
                         if os.path.exists(segments_path):
                             segments_dir = segments_path
                             break
@@ -366,17 +366,17 @@ class IndexTTS(TTSProjet):
         try:
             current_path = os.environ.get("current_path", ".")
 
-            # 实际的目录结构是: SAVAdata/temp/audio_processing/{hash}/segments
+            # 新的目录结构是: SAVAdata/temp/audio_processing/{workspace_name}/segments
             audio_processing_base = os.path.join(current_path, "SAVAdata", "temp", "audio_processing")
 
             if not os.path.exists(audio_processing_base):
                 return False
 
             # 查找 segments 目录
-            for hash_dir in os.listdir(audio_processing_base):
-                hash_dir_path = os.path.join(audio_processing_base, hash_dir)
-                if os.path.isdir(hash_dir_path):
-                    segments_path = os.path.join(hash_dir_path, "segments")
+            for workspace_dir in os.listdir(audio_processing_base):
+                workspace_dir_path = os.path.join(audio_processing_base, workspace_dir)
+                if os.path.isdir(workspace_dir_path):
+                    segments_path = os.path.join(workspace_dir_path, "segments")
                     if os.path.exists(segments_path):
                         # 检查是否有音频文件
                         for file in os.listdir(segments_path):
@@ -424,10 +424,10 @@ class IndexTTS(TTSProjet):
             spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
             avg_centroid = np.mean(spectral_centroids)
 
-            # 语音活动检测阈值（调整为宽松检测，只过滤明显噪音）
-            energy_threshold = 0.02   # RMS能量阈值（适中，过滤极低音量）
-            zcr_threshold = 0.03      # 过零率阈值（宽松，保留大部分音频）
-            centroid_threshold = 800  # 频谱质心阈值（宽松，保留低频语音）
+            # 语音活动检测阈值（极宽松检测，保留任何可能的人声）
+            energy_threshold = 0.005  # RMS能量阈值（极低，保留轻微人声）
+            zcr_threshold = 0.01      # 过零率阈值（极低，保留各种语音特征）
+            centroid_threshold = 300  # 频谱质心阈值（极低，保留所有频段语音）
 
             # 基础语音检测（宽松条件）
             basic_voice_check = (
@@ -436,15 +436,13 @@ class IndexTTS(TTSProjet):
                 avg_centroid > centroid_threshold
             )
 
-            # 简单的噪音过滤（只过滤明显的短暂噪音）
-            # 检测是否是短暂的"滋滋"声等噪音
+            # 极简噪音过滤（只过滤最明显的电子噪音）
+            # 几乎保留所有音频，只过滤明显的设备噪音
             is_short_noise = False
 
-            if duration < 0.1:  # 极短音频（小于0.1秒）
+            if duration < 0.05:  # 极极短音频（小于0.05秒，仅过滤瞬间噪音）
                 is_short_noise = True
-            elif duration < 0.3 and avg_energy < 0.05:  # 短且音量很小
-                is_short_noise = True
-            elif avg_zcr > 0.8:  # 过零率极高（典型的噪音特征）
+            elif avg_zcr > 0.9:  # 过零率极极高（明显的电子噪音）
                 is_short_noise = True
 
             # 最终判断：基础检测通过 AND 不是短暂噪音
@@ -514,41 +512,22 @@ class IndexTTS(TTSProjet):
                         f"top_k={top_k}, top_p={top_p}, temperature={temperature}")
 
             # 调用Index-TTS的gen_single接口
-            if audio_file_path:
-                result = client.predict(
-                    handle_file(audio_file_path),  # prompt
-                    text,  # text
-                    infer_mode,  # infer_mode
-                    int(max_text_tokens_per_sentence),  # max_text_tokens_per_sentence
-                    int(sentences_bucket_max_size),  # sentences_bucket_max_size
-                    do_sample,  # do_sample
-                    float(top_p),  # top_p
-                    int(top_k) if int(top_k) > 0 else 0,  # top_k
-                    float(temperature),  # temperature
-                    float(length_penalty),  # length_penalty
-                    int(num_beams),  # num_beams
-                    float(repetition_penalty),  # repetition_penalty
-                    int(max_mel_tokens),  # max_mel_tokens
-                    api_name='/gen_single'
-                )
-            else:
-                # clone模式或其他不需要音频文件的情况
-                result = client.predict(
-                    None,  # prompt (clone模式可能不需要)
-                    text,  # text
-                    infer_mode,  # infer_mode
-                    int(max_text_tokens_per_sentence),  # max_text_tokens_per_sentence
-                    int(sentences_bucket_max_size),  # sentences_bucket_max_size
-                    do_sample,  # do_sample
-                    float(top_p),  # top_p
-                    int(top_k) if int(top_k) > 0 else 0,  # top_k
-                    float(temperature),  # temperature
-                    float(length_penalty),  # length_penalty
-                    int(num_beams),  # num_beams
-                    float(repetition_penalty),  # repetition_penalty
-                    int(max_mel_tokens),  # max_mel_tokens
-                    api_name='/gen_single'
-                )
+            result = client.predict(
+                handle_file(audio_file_path),  # prompt
+                text,  # text
+                infer_mode,  # infer_mode
+                int(max_text_tokens_per_sentence),  # max_text_tokens_per_sentence
+                int(sentences_bucket_max_size),  # sentences_bucket_max_size
+                do_sample,  # do_sample
+                float(top_p),  # top_p
+                int(top_k) if int(top_k) > 0 else 0,  # top_k
+                float(temperature),  # temperature
+                float(length_penalty),  # length_penalty
+                int(num_beams),  # num_beams
+                float(repetition_penalty),  # repetition_penalty
+                int(max_mel_tokens),  # max_mel_tokens
+                api_name='/gen_single'
+            )
 
             logger.info(f'Index-TTS result={result}')
 

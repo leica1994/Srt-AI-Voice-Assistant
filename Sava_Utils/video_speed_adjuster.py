@@ -701,7 +701,7 @@ class VideoSpeedAdjuster:
             raise RuntimeError(f"Concatenate failed: {e}")
 
     def process_video_with_speed_adjustment(self, video_path: str, original_srt_path: str,
-                                            new_srt_path: str, output_path: str = None) -> Dict:
+                                            new_srt_path: str, output_path: str = None, progress_callback=None) -> Dict:
         """主处理函数：根据字幕差异对无声视频进行变速处理"""
         try:
             print(f"🚀 Processing: {Path(video_path).name}")
@@ -726,6 +726,8 @@ class VideoSpeedAdjuster:
             segment_dir.mkdir(exist_ok=True)
 
             processed_segments = []
+            completed_count = 0
+
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 future_to_segment = {
                     executor.submit(self.process_segment, video_path, segment, segment_dir): segment
@@ -734,6 +736,13 @@ class VideoSpeedAdjuster:
 
                 for future in as_completed(future_to_segment):
                     result = future.result()
+                    completed_count += 1
+
+                    # 更新进度（45% - 75% 范围内）
+                    if progress_callback:
+                        progress_percent = 45 + int((completed_count / len(segments)) * 30)
+                        progress_callback(progress_percent, desc=f"正在处理视频片段... ({completed_count}/{len(segments)})")
+
                     if result['success']:
                         processed_segments.append(result)
                     else:
@@ -743,6 +752,9 @@ class VideoSpeedAdjuster:
                 raise RuntimeError(f"Failed segments: {len(segments) - len(processed_segments)}")
 
             # 拼接视频
+            if progress_callback:
+                progress_callback(75, desc="正在拼接视频片段...")
+
             processed_segments.sort(key=lambda x: x['index'])
             segment_paths = [seg['output_path'] for seg in processed_segments]
 
@@ -784,7 +796,7 @@ class VideoSpeedAdjuster:
 
 def adjust_video_speed_by_subtitles(video_path: str, original_srt_path: str, new_srt_path: str,
                                     output_path: str = None, output_dir: str = "output",
-                                    max_workers: int = 4, use_gpu: bool = True) -> Dict:
+                                    max_workers: int = 4, use_gpu: bool = True, progress_callback=None) -> Dict:
     """
     根据字幕差异调整无声视频播放速度
 
@@ -802,7 +814,7 @@ def adjust_video_speed_by_subtitles(video_path: str, original_srt_path: str, new
     """
     with VideoSpeedAdjuster(output_dir=output_dir, max_workers=max_workers, use_gpu=use_gpu) as adjuster:
         return adjuster.process_video_with_speed_adjustment(
-            video_path, original_srt_path, new_srt_path, output_path
+            video_path, original_srt_path, new_srt_path, output_path, progress_callback
         )
 
 
