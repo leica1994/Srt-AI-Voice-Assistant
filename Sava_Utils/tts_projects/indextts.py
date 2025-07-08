@@ -580,8 +580,8 @@ class IndexTTS(TTSProjet):
             # 计算音频时长
             duration = len(y) / sr
 
-            # 如果音频太短（小于0.1秒），认为无效
-            if duration < 0.1:
+            # 如果音频太短（小于0.3秒），认为无效
+            if duration < 0.3:
                 return False, 0.0, duration
 
             # 计算RMS能量
@@ -596,33 +596,58 @@ class IndexTTS(TTSProjet):
             spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
             avg_centroid = np.mean(spectral_centroids)
 
-            # 语音活动检测阈值（极宽松检测，保留任何可能的人声）
-            energy_threshold = 0.005  # RMS能量阈值（极低，保留轻微人声）
-            zcr_threshold = 0.01  # 过零率阈值（极低，保留各种语音特征）
-            centroid_threshold = 300  # 频谱质心阈值（极低，保留所有频段语音）
+            # 计算MFCC特征（语音特有特征）
+            mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+            mfcc_var = np.var(mfccs)  # MFCC方差，语音通常有较高的方差
 
-            # 基础语音检测（宽松条件）
-            basic_voice_check = (
-                    avg_energy > energy_threshold and
-                    avg_zcr > zcr_threshold and
-                    avg_centroid > centroid_threshold
-            )
+            # 更严格的语音活动检测阈值
+            energy_threshold = 0.01   # RMS能量阈值（提高，过滤低能量噪声）
+            zcr_min_threshold = 0.02  # 过零率最小阈值（语音应有一定的过零率）
+            zcr_max_threshold = 0.5   # 过零率最大阈值（过高可能是噪声）
+            centroid_min_threshold = 500   # 频谱质心最小阈值（语音通常在此之上）
+            centroid_max_threshold = 4000  # 频谱质心最大阈值（过高可能是噪声）
+            mfcc_var_threshold = 10    # MFCC方差阈值（语音有丰富的频谱变化）
 
-            # 极简噪音过滤（只过滤最明显的电子噪音）
-            # 几乎保留所有音频，只过滤明显的设备噪音
-            is_short_noise = False
+            # 多维度语音检测
+            energy_check = avg_energy > energy_threshold
+            zcr_check = zcr_min_threshold < avg_zcr < zcr_max_threshold
+            centroid_check = centroid_min_threshold < avg_centroid < centroid_max_threshold
+            mfcc_check = mfcc_var > mfcc_var_threshold
 
-            if duration < 0.05:  # 极极短音频（小于0.05秒，仅过滤瞬间噪音）
-                is_short_noise = True
-            elif avg_zcr > 0.9:  # 过零率极极高（明显的电子噪音）
-                is_short_noise = True
+            # 计算语音置信度（满足的条件越多，置信度越高）
+            voice_score = sum([energy_check, zcr_check, centroid_check, mfcc_check])
 
-            # 最终判断：基础检测通过 AND 不是短暂噪音
-            has_voice = basic_voice_check and not is_short_noise
+            # 需要至少满足3个条件才认为是有效语音
+            has_voice = voice_score >= 3
 
-            logger.debug(f"音频检测 {audio_path}: 能量={avg_energy:.4f}, 过零率={avg_zcr:.4f}, "
-                         f"频谱质心={avg_centroid:.1f}, 时长={duration:.2f}s, "
-                         f"基础检测={basic_voice_check}, 短暂噪音={is_short_noise}, 有语音={has_voice}")
+            # 额外的噪声过滤
+            is_noise = False
+
+            # 检测静音或极低音量
+            if avg_energy < 0.005:
+                is_noise = True
+
+            # 检测单调噪声（频谱质心变化很小）
+            centroid_std = np.std(spectral_centroids)
+            if centroid_std < 50:  # 频谱质心变化太小，可能是单调噪声
+                is_noise = True
+
+            # 检测高频噪声
+            if avg_centroid > 5000:  # 频谱质心过高，可能是高频噪声
+                is_noise = True
+
+            # 最终判断
+            has_voice = has_voice and not is_noise
+
+            logger.debug(f"音频检测 {os.path.basename(audio_path)}: "
+                         f"能量={avg_energy:.4f}({energy_check}), "
+                         f"过零率={avg_zcr:.4f}({zcr_check}), "
+                         f"频谱质心={avg_centroid:.1f}({centroid_check}), "
+                         f"MFCC方差={mfcc_var:.1f}({mfcc_check}), "
+                         f"时长={duration:.2f}s, "
+                         f"语音得分={voice_score}/4, "
+                         f"噪声={is_noise}, "
+                         f"有语音={has_voice}")
 
             return has_voice, avg_energy, duration
 

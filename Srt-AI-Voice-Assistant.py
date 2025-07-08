@@ -22,6 +22,7 @@ import subprocess
 import pickle
 import concurrent.futures
 import soundfile as sf
+import numpy as np
 from tqdm import tqdm
 from collections import defaultdict
 
@@ -633,6 +634,35 @@ def handle_compose_video(progress, video_file_upload, video_path_input, subtitle
         return gr.update(value=error_info)
 
 
+def generate_silence_audio(subtitle, dir):
+    """为失败的字幕生成静音音频片段"""
+    try:
+        # 计算音频时长（秒）
+        duration = subtitle.end_time - subtitle.start_time
+        if duration <= 0:
+            duration = 1.0  # 最小1秒
+
+        # 生成静音音频
+        sr = 32000  # 采样率
+        samples = int(duration * sr)
+        silence_audio = np.zeros(samples, dtype=np.float32)
+
+        # 保存静音音频文件
+        filepath = os.path.join(dir, f"{subtitle.index}.wav")
+        sf.write(filepath, silence_audio, sr)
+
+        # 标记为成功（虽然是静音，但避免重复处理）
+        subtitle.is_success = True
+
+        logger.info(f"为字幕 {subtitle.index} 生成静音片段: {duration:.2f}秒")
+        return filepath
+
+    except Exception as e:
+        logger.error(f"生成静音片段失败 {subtitle.index}: {e}")
+        subtitle.is_success = False
+        return None
+
+
 def get_output_dir_with_workspace_name(workspace_name=None, fallback_name="default"):
     """
     生成基于workspace名称的输出目录路径
@@ -1074,14 +1104,17 @@ def save(args, proj: str = None, dir: str = None, subtitle: Subtitle = None):
             subtitle.is_success = True
             return filepath
         else:
-            data = json.loads(audio)
-            logger.error(f"{i18n('Failed subtitle id')}:{subtitle.index},{i18n('error message received')}:{str(data)}")
-            subtitle.is_success = False
-            return None
+            try:
+                data = json.loads(audio)
+                logger.error(f"{i18n('Failed subtitle id')}:{subtitle.index},{i18n('error message received')}:{str(data)}")
+            except:
+                logger.error(f"{i18n('Failed subtitle id')}:{subtitle.index}, 无效的音频数据")
     else:
         logger.error(f"{i18n('Failed subtitle id')}:{subtitle.index}")
-        subtitle.is_success = False
-        return None
+
+    # 当TTS失败时，生成静音片段而不是返回None
+    logger.info(f"TTS失败，为字幕 {subtitle.index} 生成静音片段")
+    return generate_silence_audio(subtitle, dir)
 
 
 def start_gsv():
