@@ -7,11 +7,14 @@ from gradio_client import Client, handle_file
 from . import TTSProjet
 from .. import logger, i18n
 from ..subtitle_text_formatter import format_subtitle_text
+import io
+import soundfile as sf
 
 # 可选导入音频处理库
 try:
     import numpy as np
     import librosa
+
     AUDIO_DETECTION_AVAILABLE = True
 except ImportError:
     AUDIO_DETECTION_AVAILABLE = False
@@ -38,7 +41,6 @@ class IndexTTS(TTSProjet):
             if os.path.exists(self.config_file):
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                logger.info(f"已加载Index-TTS配置: {config}")
                 return config
         except Exception as e:
             logger.warning(f"加载Index-TTS配置失败: {e}")
@@ -68,9 +70,46 @@ class IndexTTS(TTSProjet):
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
-            logger.info(f"已保存Index-TTS配置: {config}")
         except Exception as e:
             logger.error(f"保存Index-TTS配置失败: {e}")
+
+    def restore_config(self):
+        """公共方法：恢复配置到UI组件"""
+        try:
+            current_config = self._load_config()
+            logger.info(f"恢复Index-TTS配置到UI组件")
+
+            # 更新所有组件的值
+            if hasattr(self, 'mode_selection'):
+                self.mode_selection.value = current_config.get("mode_selection", "内置")
+            if hasattr(self, 'builtin_audio_selection'):
+                self.builtin_audio_selection.value = current_config.get("builtin_audio_selection", "舒朗男声")
+            if hasattr(self, 'language'):
+                self.language.value = current_config.get("language", "中文")
+            if hasattr(self, 'do_sample'):
+                self.do_sample.value = current_config.get("do_sample", True)
+            if hasattr(self, 'temperature'):
+                self.temperature.value = current_config.get("temperature", 1.0)
+            if hasattr(self, 'top_p'):
+                self.top_p.value = current_config.get("top_p", 0.8)
+            if hasattr(self, 'volume_gain'):
+                self.volume_gain.value = current_config.get("volume_gain", 1.0)
+            if hasattr(self, 'api_url'):
+                self.api_url.value = current_config.get("api_url", "http://127.0.0.1:7860")
+
+            # 更新组件可见性
+            mode = current_config.get("mode_selection", "内置")
+            if hasattr(self, 'builtin_audio_selection'):
+                self.builtin_audio_selection.visible = (mode == "内置")
+            if hasattr(self, 'builtin_audio_preview'):
+                self.builtin_audio_preview.visible = (mode == "内置")
+            if hasattr(self, 'reference_audio'):
+                self.reference_audio.visible = (mode == "自定义")
+
+            return True
+        except Exception as e:
+            logger.error(f"恢复配置失败: {e}")
+            return False
 
     def get_builtin_audio_map(self):
         """获取内置音频映射表"""
@@ -276,7 +315,7 @@ class IndexTTS(TTSProjet):
                 if has_voice:
                     direction = "前面" if number < target_number else "后面" if number > target_number else "当前"
                     logger.info(f"找到有效语音片段: {file_path} (行号: {number}, 距离: {distance}, "
-                              f"方向: {direction}, 能量: {energy:.4f}, 时长: {duration:.2f}s)")
+                                f"方向: {direction}, 能量: {energy:.4f}, 时长: {duration:.2f}s)")
                     return file_path
                 else:
                     logger.debug(f"片段无有效语音: {file_path} (行号: {number}, 距离: {distance}, 能量: {energy:.4f})")
@@ -401,7 +440,7 @@ class IndexTTS(TTSProjet):
 
             selected_file = os.path.join(segments_dir, selected[1])
             logger.info(f"使用最近片段: {selected_file} (行号: {selected[0]}, 距离: {distance}, "
-                       f"目标: {target_number}, 方向: {direction})")
+                        f"目标: {target_number}, 方向: {direction})")
             return selected_file
 
         # 如果没有找到，返回None
@@ -474,14 +513,14 @@ class IndexTTS(TTSProjet):
 
             # 语音活动检测阈值（极宽松检测，保留任何可能的人声）
             energy_threshold = 0.005  # RMS能量阈值（极低，保留轻微人声）
-            zcr_threshold = 0.01      # 过零率阈值（极低，保留各种语音特征）
+            zcr_threshold = 0.01  # 过零率阈值（极低，保留各种语音特征）
             centroid_threshold = 300  # 频谱质心阈值（极低，保留所有频段语音）
 
             # 基础语音检测（宽松条件）
             basic_voice_check = (
-                avg_energy > energy_threshold and
-                avg_zcr > zcr_threshold and
-                avg_centroid > centroid_threshold
+                    avg_energy > energy_threshold and
+                    avg_zcr > zcr_threshold and
+                    avg_centroid > centroid_threshold
             )
 
             # 极简噪音过滤（只过滤最明显的电子噪音）
@@ -497,8 +536,8 @@ class IndexTTS(TTSProjet):
             has_voice = basic_voice_check and not is_short_noise
 
             logger.debug(f"音频检测 {audio_path}: 能量={avg_energy:.4f}, 过零率={avg_zcr:.4f}, "
-                        f"频谱质心={avg_centroid:.1f}, 时长={duration:.2f}s, "
-                        f"基础检测={basic_voice_check}, 短暂噪音={is_short_noise}, 有语音={has_voice}")
+                         f"频谱质心={avg_centroid:.1f}, 时长={duration:.2f}s, "
+                         f"基础检测={basic_voice_check}, 短暂噪音={is_short_noise}, 有语音={has_voice}")
 
             return has_voice, avg_energy, duration
 
@@ -518,10 +557,6 @@ class IndexTTS(TTSProjet):
             bytes: 处理后的音频数据
         """
         try:
-            import io
-            import numpy as np
-            import soundfile as sf
-
             # 如果音量增益为1.0，直接返回原音频
             if volume_gain == 1.0:
                 return audio_data
@@ -700,21 +735,29 @@ class IndexTTS(TTSProjet):
 
     def _UI(self):
         """创建Index-TTS的UI界面"""
-        # 加载配置
+        # 强制重新加载最新配置，不使用任何缓存
+        self._ensure_config_dir()  # 确保配置目录存在
         saved_config = self._load_config()
+        logger.info(f"UI初始化时强制加载最新配置: {saved_config}")
 
         with gr.TabItem("🔥 Index-TTS"):
             with gr.Column():
+                # 参考音频模式 - 放在最上面，强制使用最新配置
+                current_mode = self._load_config().get("mode_selection", "内置")
+                logger.info(f"设置参考音频模式为: {current_mode}")
 
-                # 参考音频模式 - 放在最上面
                 self.mode_selection = gr.Radio(
                     label="参考音频模式",
                     choices=["内置", "clone", "自定义"],
-                    value=saved_config.get("mode_selection", "内置"),
+                    value=current_mode,
                     interactive=True
                 )
 
-                # 内置音频选择 - 默认显示
+                # 内置音频选择 - 强制使用最新配置
+                current_builtin_audio = self._load_config().get("builtin_audio_selection", "舒朗男声")
+                current_builtin_visible = (current_mode == "内置")
+                logger.info(f"设置内置音频选择: {current_builtin_audio}, 可见性: {current_builtin_visible}")
+
                 self.builtin_audio_selection = gr.Dropdown(
                     label="内置音频选择",
                     choices=[
@@ -728,25 +771,31 @@ class IndexTTS(TTSProjet):
                         "真诚青年", "温柔学姐", "嘴硬竹马",
                         "清脆少女", "清澈邻家弟弟", "软软女孩"
                     ],
-                    value=saved_config.get("builtin_audio_selection", "舒朗男声"),
-                    visible=saved_config.get("mode_selection", "内置") == "内置",
+                    value=current_builtin_audio,
+                    visible=current_builtin_visible,
                     interactive=True
                 )
 
-                # 内置音频试听 - 设置默认音频
+                # 内置音频试听 - 强制使用最新配置
+                current_preview_visible = (current_mode == "内置")
+                logger.info(f"设置试听内置音频可见性: {current_preview_visible}")
+
                 default_audio_path = self.get_default_builtin_audio()
                 self.builtin_audio_preview = gr.Audio(
                     label="试听内置音频",
                     value=default_audio_path,
-                    visible=True,
+                    visible=current_preview_visible,
                     interactive=False
                 )
 
-                # 参考音频上传 - 初始隐藏
+                # 参考音频上传 - 强制使用最新配置
+                current_reference_visible = (current_mode == "自定义")
+                logger.info(f"设置参考音频上传可见性: {current_reference_visible}")
+
                 self.reference_audio = gr.Audio(
                     label=i18n("Reference Audio"),
                     type="filepath",
-                    visible=False
+                    visible=current_reference_visible
                 )
 
                 # 合成语言
@@ -1000,6 +1049,66 @@ class IndexTTS(TTSProjet):
                 outputs=[]
             )
 
+        # 添加标签切换时的配置恢复功能
+        def restore_config_on_tab_switch():
+            """标签切换时恢复配置"""
+            try:
+                current_config = self._load_config()
+                logger.info(f"标签切换时恢复Index-TTS配置: {current_config}")
+
+                # 返回所有组件的更新值
+                return {
+                    self.mode_selection: gr.update(value=current_config.get("mode_selection", "内置")),
+                    self.builtin_audio_selection: gr.update(
+                        value=current_config.get("builtin_audio_selection", "舒朗男声")),
+                    self.language: gr.update(value=current_config.get("language", "中文")),
+                    self.do_sample: gr.update(value=current_config.get("do_sample", True)),
+                    self.temperature: gr.update(value=current_config.get("temperature", 1.0)),
+                    self.top_p: gr.update(value=current_config.get("top_p", 0.8)),
+                    self.top_k: gr.update(value=current_config.get("top_k", 30)),
+                    self.volume_gain: gr.update(value=current_config.get("volume_gain", 1.0)),
+                    self.api_url: gr.update(value=current_config.get("api_url", "http://127.0.0.1:7860"))
+                }
+            except Exception as e:
+                logger.error(f"恢复配置时出错: {e}")
+                return {}
+
+        # 添加应用加载时的配置刷新机制
+        def refresh_config_on_app_load():
+            """应用加载时刷新配置"""
+            try:
+                fresh_config = self._load_config()
+
+                # 更新组件可见性
+                mode = fresh_config.get("mode_selection", "内置")
+                return [
+                    gr.update(value=mode),  # mode_selection
+                    gr.update(
+                        value=fresh_config.get("builtin_audio_selection", "舒朗男声"),
+                        visible=(mode == "内置")
+                    ),  # builtin_audio_selection
+                    gr.update(visible=(mode == "内置")),  # builtin_audio_preview
+                    gr.update(visible=(mode == "自定义")),  # reference_audio
+                    gr.update(value=fresh_config.get("language", "中文")),  # language
+                    gr.update(value=fresh_config.get("do_sample", True)),  # do_sample
+                    gr.update(value=fresh_config.get("temperature", 1.0)),  # temperature
+                    gr.update(value=fresh_config.get("top_p", 0.8)),  # top_p
+                    gr.update(value=fresh_config.get("top_k", 30)),  # top_k
+                    gr.update(value=fresh_config.get("volume_gain", 1.0)),  # volume_gain
+                    gr.update(value=fresh_config.get("api_url", "http://127.0.0.1:7860"))  # api_url
+                ]
+            except Exception as e:
+                logger.error(f"应用加载配置刷新失败: {e}")
+                return [gr.update() for _ in range(11)]
+
+        # 在应用加载时自动刷新配置
+        # 使用Gradio的load事件
+        app_load_outputs = [
+            self.mode_selection, self.builtin_audio_selection, self.builtin_audio_preview,
+            self.reference_audio, self.language, self.do_sample, self.temperature,
+            self.top_p, self.top_k, self.volume_gain, self.api_url
+        ]
+
         # 返回参数列表，按照其他TTS项目的格式
         INDEXTTS_ARGS = [
             self.reference_audio,
@@ -1020,6 +1129,11 @@ class IndexTTS(TTSProjet):
             self.infer_mode,
             self.api_url
         ]
+
+        # 存储配置刷新函数和输出组件，供外部调用
+        self.refresh_config_on_app_load = refresh_config_on_app_load
+        self.app_load_outputs = app_load_outputs
+
         return INDEXTTS_ARGS
 
     def before_gen_action(self, *args, **kwargs):

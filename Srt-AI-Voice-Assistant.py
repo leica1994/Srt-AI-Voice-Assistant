@@ -30,7 +30,6 @@ from Sava_Utils.subtitle import Subtitle, Subtitles
 from Sava_Utils.video_speed_adjuster import adjust_video_speed_by_subtitles, merge_video_with_audio
 
 import Sava_Utils.tts_projects
-import Sava_Utils.tts_projects.bv2
 import Sava_Utils.tts_projects.gsv
 import Sava_Utils.tts_projects.edgetts
 import Sava_Utils.tts_projects.custom
@@ -38,14 +37,13 @@ import Sava_Utils.tts_projects.indextts
 from Sava_Utils.subtitle_translation import Translation_module
 from Sava_Utils.polyphone import Polyphone
 
-BV2 = Sava_Utils.tts_projects.bv2.BV2(Sava_Utils.config)
 GSV = Sava_Utils.tts_projects.gsv.GSV(Sava_Utils.config)
 EDGETTS = Sava_Utils.tts_projects.edgetts.EdgeTTS(Sava_Utils.config)
 CUSTOM = Sava_Utils.tts_projects.custom.Custom(Sava_Utils.config)
 INDEXTTS = Sava_Utils.tts_projects.indextts.IndexTTS(Sava_Utils.config)
 TRANSLATION_MODULE = Translation_module(Sava_Utils.config)
 POLYPHONE = Polyphone(Sava_Utils.config)
-Projet_dict = {"bv2": BV2, "gsv": GSV, "edgetts": EDGETTS, "indextts": INDEXTTS, "custom": CUSTOM}
+Projet_dict = {"gsv": GSV, "edgetts": EDGETTS, "indextts": INDEXTTS, "custom": CUSTOM}
 
 
 def get_output_dir_with_workspace_name(workspace_name=None, fallback_name="default"):
@@ -78,7 +76,7 @@ def get_output_dir_with_workspace_name(workspace_name=None, fallback_name="defau
 
 
 componments = {
-    1: [GSV, BV2, INDEXTTS, EDGETTS, CUSTOM],
+    1: [GSV, INDEXTTS, EDGETTS, CUSTOM],
     2: [TRANSLATION_MODULE, POLYPHONE],
     3: [],
 }
@@ -499,17 +497,6 @@ def save(args, proj: str = None, dir: str = None, subtitle: Subtitle = None):
         return None
 
 
-def start_hiyoriui():
-    if Sava_Utils.config.bv2_pydir == "":
-        gr.Warning(i18n(
-            'Please go to the settings page to specify the corresponding environment path and do not forget to save it!'))
-        return i18n(
-            'Please go to the settings page to specify the corresponding environment path and do not forget to save it!')
-    command = f'"{Sava_Utils.config.bv2_pydir}" "{os.path.join(Sava_Utils.config.bv2_dir, "hiyoriUI.py")}" {Sava_Utils.config.bv2_args}'
-    rc_open_window(command=command, dir=Sava_Utils.config.bv2_dir)
-    time.sleep(0.1)
-    return f"HiyoriUI{i18n(' has been launched, please ensure the configuration is correct.')}"
-
 
 def start_gsv():
     if Sava_Utils.config.gsv_pydir == "":
@@ -529,6 +516,53 @@ def start_gsv():
     rc_open_window(command=command, dir=Sava_Utils.config.gsv_dir)
     time.sleep(0.1)
     return f"GSV-API{i18n(' has been launched, please ensure the configuration is correct.')}"
+
+
+def start_indextts():
+    # 检查是否配置了启动脚本
+    if Sava_Utils.config.indextts_script and Sava_Utils.config.indextts_script.strip():
+        # 使用启动脚本/命令
+        script_command = Sava_Utils.config.indextts_script.strip()
+
+        # 判断是文件路径还是命令
+        if script_command.startswith(('powershell', 'cmd', 'python', 'bash', 'sh')) or ' ' in script_command:
+            # 这是一个命令，直接执行
+            command = f'{script_command} {Sava_Utils.config.indextts_args}'
+            work_dir = Sava_Utils.config.indextts_dir if Sava_Utils.config.indextts_dir else os.getcwd()
+            rc_open_window(command=command, dir=work_dir)
+            time.sleep(0.1)
+            return f"Index-TTS 启动命令已执行: {script_command.split()[0]}"
+        else:
+            # 这是一个文件路径，检查文件是否存在
+            if not os.path.exists(script_command):
+                gr.Warning(f"启动脚本不存在: {script_command}")
+                return f"启动脚本不存在: {script_command}"
+
+            # 获取脚本目录作为工作目录
+            script_dir = os.path.dirname(script_command)
+            if not script_dir:
+                script_dir = Sava_Utils.config.indextts_dir if Sava_Utils.config.indextts_dir else os.getcwd()
+
+            # 执行启动脚本
+            command = f'"{script_command}" {Sava_Utils.config.indextts_args}'
+            rc_open_window(command=command, dir=script_dir)
+            time.sleep(0.1)
+            return f"Index-TTS 启动脚本已执行: {os.path.basename(script_command)}"
+
+    else:
+        # 使用原来的启动逻辑
+        if Sava_Utils.config.indextts_pydir == "":
+            gr.Warning(i18n(
+                'Please go to the settings page to specify the corresponding environment path and do not forget to save it!'))
+            return i18n(
+                'Please go to the settings page to specify the corresponding environment path and do not forget to save it!')
+        apath = "api.py"  # Index-TTS API文件
+        if not os.path.exists(os.path.join(Sava_Utils.config.indextts_dir, apath)):
+            raise FileNotFoundError(os.path.join(Sava_Utils.config.indextts_dir, apath))
+        command = f'"{Sava_Utils.config.indextts_pydir}" "{os.path.join(Sava_Utils.config.indextts_dir, apath)}" {Sava_Utils.config.indextts_args}'
+        rc_open_window(command=command, dir=Sava_Utils.config.indextts_dir)
+        time.sleep(0.1)
+        return f"Index-TTS API{i18n(' has been launched, please ensure the configuration is correct.')}"
 
 
 def remake(*args):
@@ -670,10 +704,11 @@ if __name__ == "__main__":
                             apply_spkmap2workspace_btn = gr.Button(value=i18n('Apply to current Workspace'))
                         create_multispeaker_btn = gr.Button(value=i18n('Create Multi-Speaker Dubbing Project'))
                     with gr.Column():
-                        TTS_ARGS = []
-                        for i in componments[1]:
-                            TTS_ARGS.append(i.getUI())
-                    GSV_ARGS, BV2_ARGS, INDEXTTS_ARGS, EDGETTS_ARGS, CUSTOM_ARGS = TTS_ARGS
+                        with gr.Tabs():
+                            TTS_ARGS = []
+                            for i in componments[1]:
+                                TTS_ARGS.append(i.getUI())
+                        GSV_ARGS, INDEXTTS_ARGS, EDGETTS_ARGS, CUSTOM_ARGS = TTS_ARGS
                     with gr.Column():
                         with gr.Accordion(i18n('Other Parameters'), open=True):
                             fps = gr.Number(label=i18n(
@@ -730,10 +765,10 @@ if __name__ == "__main__":
                         stop_btn.click(lambda x: gr.Info(x.set()), inputs=[INTERRUPT_EVENT])
                         if not Sava_Utils.config.server_mode:
                             with gr.Accordion(i18n('API Launcher')):
-                                start_hiyoriui_btn = gr.Button(value="HiyoriUI")
                                 start_gsv_btn = gr.Button(value="GPT-SoVITS")
-                                start_hiyoriui_btn.click(start_hiyoriui, outputs=[gen_textbox_output_text])
+                                start_indextts_btn = gr.Button(value="Index-TTS")
                                 start_gsv_btn.click(start_gsv, outputs=[gen_textbox_output_text])
+                                start_indextts_btn.click(start_indextts, outputs=[gen_textbox_output_text])
                         input_file.change(file_show, inputs=[input_file], outputs=[textbox_intput_text])
 
                         # 处理状态跟踪
@@ -1275,11 +1310,7 @@ if __name__ == "__main__":
                                 with gr.Row(equal_height=True):
                                     __ = gr.Button(value="▶️", scale=1, min_width=50)
                                     __.click(play_audio, inputs=[edit_real_index, STATE], outputs=[audio_player])
-                                    bv2regenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=False)
-                                    bv2regenbtn.click(remake,
-                                                      inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt,
-                                                              *BV2_ARGS, STATE],
-                                                      outputs=[audio_player, page_slider] + edit_rows[-6:])
+
                                     gsvregenbtn = gr.Button(value="🔄️", scale=1, min_width=50, visible=True)
                                     gsvregenbtn.click(remake,
                                                       inputs=[page_slider, edit_real_index, edit_start_end_time, s_txt,
@@ -1300,7 +1331,6 @@ if __name__ == "__main__":
                                                          inputs=[page_slider, edit_real_index, edit_start_end_time,
                                                                  s_txt, CUSTOM.choose_custom_api, STATE],
                                                          outputs=[audio_player, page_slider] + edit_rows[-6:])
-                                    edit_rows.append(bv2regenbtn)
                                     edit_rows.append(gsvregenbtn)
                                     edit_rows.append(edgettsregenbtn)
                                     edit_rows.append(indexttsregenbtn)
@@ -1337,9 +1367,7 @@ if __name__ == "__main__":
                             delete_btn.click(delete_subtitle,
                                              inputs=[page_slider, STATE, *edit_check_list, *edit_real_index_list],
                                              outputs=[*edit_check_list, page_slider, *edit_rows])
-                            all_regen_btn_bv2 = gr.Button(value=i18n('Continue Generation'), variant="primary",
-                                                          visible=False, interactive=True, min_width=50)
-                            edit_rows.append(all_regen_btn_bv2)
+
                             all_regen_btn_gsv = gr.Button(value=i18n('Continue Generation'), variant="primary",
                                                           visible=True, interactive=True, min_width=50)
                             edit_rows.append(all_regen_btn_gsv)
@@ -1352,10 +1380,7 @@ if __name__ == "__main__":
                             all_regen_btn_custom = gr.Button(value=i18n('Continue Generation'), variant="primary",
                                                              visible=False, interactive=True, min_width=50)
                             edit_rows.append(all_regen_btn_custom)
-                            all_regen_btn_bv2.click(
-                                lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args,
-                                                                                                     remake=True),
-                                inputs=[INTERRUPT_EVENT, page_slider, workers, *BV2_ARGS, STATE], outputs=edit_rows)
+
                             all_regen_btn_gsv.click(
                                 lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args,
                                                                                                      remake=True),
@@ -1411,7 +1436,7 @@ if __name__ == "__main__":
                                                    choices=refspklist(),
                                                    allow_custom_value=not Sava_Utils.config.server_mode, scale=4)
                         # speaker_list.change(set_default_speaker,inputs=[speaker_list,STATE])
-                        select_spk_projet = gr.Dropdown(choices=['bv2', 'gsv', 'edgetts', 'indextts', 'custom'],
+                        select_spk_projet = gr.Dropdown(choices=['gsv', 'indextts', 'edgetts', 'custom'],
                                                         value='gsv', interactive=True, label=i18n('TTS Project'))
                         refresh_spk_list_btn = gr.Button(value="🔄️", min_width=60, scale=0)
                         refresh_spk_list_btn.click(getspklist, inputs=[], outputs=[speaker_list])
@@ -1420,9 +1445,7 @@ if __name__ == "__main__":
                                                            *edit_real_index_list],
                                         outputs=[*edit_check_list, *edit_rows])
 
-                        save_spk_btn_bv2 = gr.Button(value="💾", min_width=60, scale=0, visible=False)
-                        save_spk_btn_bv2.click(lambda *args: save_spk(*args, project="bv2"),
-                                               inputs=[speaker_list, *BV2_ARGS], outputs=[speaker_list])
+
                         save_spk_btn_gsv = gr.Button(value="💾", min_width=60, scale=0, visible=True)
                         save_spk_btn_gsv.click(lambda *args: save_spk(*args, project="gsv"),
                                                inputs=[speaker_list, *GSV_ARGS], outputs=[speaker_list])
@@ -1438,8 +1461,8 @@ if __name__ == "__main__":
                                                   outputs=[speaker_list])
 
                         select_spk_projet.change(switch_spk_proj, inputs=[select_spk_projet],
-                                                 outputs=[save_spk_btn_bv2, save_spk_btn_gsv, save_spk_btn_edgetts,
-                                                          save_spk_btn_indextts, save_spk_btn_custom])
+                                                 outputs=[save_spk_btn_gsv, save_spk_btn_indextts,
+                                                          save_spk_btn_edgetts, save_spk_btn_custom])
 
                         del_spk_list_btn = gr.Button(value="🗑️", min_width=60, scale=0)
                         del_spk_list_btn.click(del_spk, inputs=[speaker_list], outputs=[speaker_list])
@@ -1482,10 +1505,7 @@ if __name__ == "__main__":
         create_multispeaker_btn.click(create_multi_speaker,
                                       inputs=[input_file, use_labled_text_mode, speaker_map_dict, fps, offset],
                                       outputs=[worklist, page_slider, *edit_rows, STATE])
-        BV2.gen_btn1.click(
-            lambda process=gr.Progress(track_tqdm=True), *args: generate_preprocess(*args, project="bv2"),
-            inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *BV2_ARGS],
-            outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
+
         GSV.gen_btn2.click(
             lambda process=gr.Progress(track_tqdm=True), *args: generate_preprocess(*args, project="gsv"),
             inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *GSV_ARGS],
@@ -1503,6 +1523,14 @@ if __name__ == "__main__":
             inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, CUSTOM.choose_custom_api],
             outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
         # Stability is not ensured due to the mechanism of gradio.
+
+        # 添加Index-TTS配置刷新事件
+        if hasattr(INDEXTTS, 'refresh_config_on_app_load') and hasattr(INDEXTTS, 'app_load_outputs'):
+            app.load(
+                fn=INDEXTTS.refresh_config_on_app_load,
+                inputs=[],
+                outputs=INDEXTTS.app_load_outputs
+            )
 
     app.queue(default_concurrency_limit=Sava_Utils.config.concurrency_count,
               max_size=2 * Sava_Utils.config.concurrency_count).launch(

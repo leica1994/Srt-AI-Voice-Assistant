@@ -65,9 +65,10 @@ class Settings:
         num_edit_rows: int = 7,
         export_spk_pattern: str = "",
         theme: str = "default",
-        bv2_pydir: str = "",
-        bv2_dir: str = "",
-        bv2_args: str = "",
+        indextts_pydir: str = "",
+        indextts_dir: str = "",
+        indextts_args: str = "",
+        indextts_script: str = "",
         gsv_fallback: bool = False,
         gsv_pydir: str = "",
         gsv_dir: str = "",
@@ -91,9 +92,11 @@ class Settings:
         self.num_edit_rows = max(int(num_edit_rows),1)
         self.export_spk_pattern = export_spk_pattern
         self.theme = theme
-        self.bv2_pydir = bv2_pydir.strip('"')
-        self.bv2_dir = os.path.abspath(bv2_dir.strip('"')) if bv2_dir else bv2_dir
-        self.bv2_args = bv2_args
+        self.indextts_pydir = indextts_pydir.strip('"')
+        self.indextts_dir = os.path.abspath(indextts_dir.strip('"')) if indextts_dir else indextts_dir
+        self.indextts_args = indextts_args
+        # 启动脚本可能是命令而不是文件路径，所以不进行路径处理
+        self.indextts_script = indextts_script.strip('"') if indextts_script else indextts_script
         self.gsv_fallback = gsv_fallback
         self.gsv_pydir = gsv_pydir.strip('"')
         self.gsv_dir = os.path.abspath(gsv_dir.strip('"')) if gsv_dir else gsv_dir
@@ -103,20 +106,20 @@ class Settings:
         self.ms_lang_option = ms_lang_option
         self.ollama_url = ollama_url
         # detect python envs####
-        if self.bv2_pydir != "":
-            if os.path.isfile(self.bv2_pydir):
-                self.bv2_pydir = os.path.abspath(self.bv2_pydir)
-            elif self.bv2_pydir == 'python':
+        if self.indextts_pydir != "":
+            if os.path.isfile(self.indextts_pydir):
+                self.indextts_pydir = os.path.abspath(self.indextts_pydir)
+            elif self.indextts_pydir == 'python':
                 pass
             else:
-                gr.Warning(f"{i18n('Error, Invalid Path')}:{self.bv2_pydir}")
-                self.bv2_pydir = ""
+                gr.Warning(f"{i18n('Error, Invalid Path')}:{self.indextts_pydir}")
+                self.indextts_pydir = ""
         else:
-            if os.path.isfile(os.path.join(current_path, "venv\\python.exe")) and "VITS2" in current_path.upper():
-                self.bv2_pydir = os.path.join(current_path, "venv\\python.exe")
-                logger.info(f"{i18n('Env detected')}: Bert-VITS2")
+            if os.path.isfile(os.path.join(current_path, "venv\\python.exe")) and "INDEX" in current_path.upper():
+                self.indextts_pydir = os.path.join(current_path, "venv\\python.exe")
+                logger.info(f"{i18n('Env detected')}: Index-TTS")
             else:
-                self.bv2_pydir = ""
+                self.indextts_pydir = ""
 
         if self.gsv_pydir != "":
             if os.path.isfile(self.gsv_pydir):
@@ -133,8 +136,8 @@ class Settings:
             else:
                 self.gsv_pydir = ""
         ###################
-        if self.bv2_pydir != "" and bv2_dir == "":
-            self.bv2_dir = os.path.dirname(os.path.dirname(self.bv2_pydir))
+        if self.indextts_pydir != "" and indextts_dir == "":
+            self.indextts_dir = os.path.dirname(os.path.dirname(self.indextts_pydir))
         if self.gsv_pydir != "" and gsv_dir == "":
             self.gsv_dir = os.path.dirname(os.path.dirname(self.gsv_pydir))
 
@@ -286,10 +289,11 @@ class Settings_UI:
 
         with gr.Accordion(i18n('Submodule Settings'),open=False):
             with gr.Group():
-                gr.Markdown(value="BV2")
-                self.bv2_pydir_input = gr.Textbox(label=i18n('Python Interpreter Path for BV2'), interactive=True, value=Sava_Utils.config.bv2_pydir)
-                self.bv2_dir_input = gr.Textbox(label=i18n('Root Path of BV2'), interactive=True, value=Sava_Utils.config.bv2_dir)
-                self.bv2_args = gr.Textbox(label=i18n('Start Parameters'), interactive=True, value=Sava_Utils.config.bv2_args)
+                gr.Markdown(value="Index-TTS")
+                self.indextts_pydir_input = gr.Textbox(label=i18n('Python Interpreter Path for Index-TTS'), interactive=True, value=Sava_Utils.config.indextts_pydir)
+                self.indextts_dir_input = gr.Textbox(label=i18n('Root Path of Index-TTS'), interactive=True, value=Sava_Utils.config.indextts_dir)
+                self.indextts_args = gr.Textbox(label=i18n('Start Parameters'), interactive=True, value=Sava_Utils.config.indextts_args)
+                self.indextts_script = gr.Textbox(label="启动脚本", interactive=True, value=Sava_Utils.config.indextts_script, info="可选：指定启动脚本路径或命令，如果填入则直接执行此脚本/命令")
             with gr.Group():
                 gr.Markdown(value="GSV")
                 self.gsv_fallback = gr.Checkbox(value=False, label=i18n('Downgrade API version to v1'), interactive=True)
@@ -318,9 +322,10 @@ class Settings_UI:
             self.num_edit_rows,
             self.export_spk_pattern,
             self.theme,
-            self.bv2_pydir_input,
-            self.bv2_dir_input,
-            self.bv2_args,
+            self.indextts_pydir_input,
+            self.indextts_dir_input,
+            self.indextts_args,
+            self.indextts_script,
             self.gsv_fallback,
             self.gsv_pydir_input,
             self.gsv_dir_input,

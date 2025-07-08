@@ -19,12 +19,11 @@ def load_page(subtitle_list, target_index=1):
     return gr.update(minimum=1, maximum=length if length > 0 else 1, interactive=True, value=value), *show_page(value, subtitle_list)
 
 BTN_VISIBLE_DICT = {
-    "bv2": [gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False)],
-    "gsv": [gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False)],
-    "edgetts": [gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)],
-    "indextts": [gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)],
-    "custom": [gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True)],
-    None: [gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False)],
+    "gsv": [gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False)],
+    "indextts": [gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)],
+    "edgetts": [gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)],
+    "custom": [gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True)],
+    None: [gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False)],
 }
 
 
