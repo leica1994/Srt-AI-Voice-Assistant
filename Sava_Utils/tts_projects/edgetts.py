@@ -1,10 +1,14 @@
+# 所有import语句统一放在文件顶部
 import os
+import io
 import asyncio
+import tempfile
 import gradio as gr
 import edge_tts
 import ffmpeg
 from pydub import AudioSegment
 
+# 项目内部导入
 from . import TTSProjet
 from .. import logger
 
@@ -191,10 +195,6 @@ class EdgeTTS(TTSProjet):
     def _convert_to_wav(self, audio_data):
         """将MP3音频数据转换为WAV格式"""
         try:
-            import io
-            import tempfile
-            import os
-
             # 检查是否是MP3格式
             if audio_data[:2] == b'\xff\xf3' or audio_data[:3] == b'ID3':
                 logger.info("检测到MP3格式，转换为WAV...")
@@ -465,8 +465,6 @@ class EdgeTTS(TTSProjet):
             audio_data = self.api(language, speaker, rate, pitch, preview_text)
             if audio_data:
                 # 保存临时音频文件
-                import tempfile
-
                 with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
                     # Edge-TTS 返回的是 MP3 格式，需要转换
                     if audio_data[:2] == b'\xff\xf3' or audio_data[:3] == b'ID3':

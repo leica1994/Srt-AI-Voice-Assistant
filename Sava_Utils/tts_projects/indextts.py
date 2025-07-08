@@ -1,14 +1,15 @@
+# 所有import语句统一放在文件顶部
 import os
 import json
-
+import io
+import soundfile as sf
 import gradio as gr
 from gradio_client import Client, handle_file
 
+# 项目内部导入
 from . import TTSProjet
 from .. import logger, i18n
 from ..subtitle_text_formatter import format_subtitle_text
-import io
-import soundfile as sf
 
 # 可选导入音频处理库
 try:
@@ -21,6 +22,90 @@ except ImportError:
     logger.warning("音频检测功能不可用：numpy 或 librosa 未安装。Clone 模式将使用基础选择逻辑。")
 
 current_path = os.environ.get("current_path")
+
+
+def save_current_config(indextts_instance, *args):
+    """保存当前配置"""
+    try:
+        config = {
+            "mode_selection": args[0],
+            "builtin_audio_selection": args[1],
+            "language": args[2],
+            "do_sample": args[3],
+            "temperature": args[4],
+            "top_p": args[5],
+            "top_k": args[6],
+            "num_beams": args[7],
+            "repetition_penalty": args[8],
+            "length_penalty": args[9],
+            "max_mel_tokens": args[10],
+            "volume_gain": args[11],
+            "max_text_tokens_per_sentence": args[12],
+            "sentences_bucket_max_size": args[13],
+            "infer_mode": args[14],
+            "api_url": args[15]
+        }
+        indextts_instance._save_config(config)
+    except Exception as e:
+        logger.error(f"保存配置时出错: {e}")
+
+
+def restore_config_on_tab_switch(indextts_instance):
+    """标签切换时恢复配置"""
+    try:
+        current_config = indextts_instance._load_config()
+        logger.info(f"标签切换时恢复Index-TTS配置: {current_config}")
+
+        # 返回所有组件的更新值
+        return {
+            indextts_instance.mode_selection: gr.update(value=current_config.get("mode_selection", "内置")),
+            indextts_instance.builtin_audio_selection: gr.update(
+                value=current_config.get("builtin_audio_selection", "舒朗男声")),
+            indextts_instance.language: gr.update(value=current_config.get("language", "中文")),
+            indextts_instance.do_sample: gr.update(value=current_config.get("do_sample", True)),
+            indextts_instance.temperature: gr.update(value=current_config.get("temperature", 1.0)),
+            indextts_instance.top_p: gr.update(value=current_config.get("top_p", 0.8)),
+            indextts_instance.top_k: gr.update(value=current_config.get("top_k", 30)),
+            indextts_instance.volume_gain: gr.update(value=current_config.get("volume_gain", 1.0)),
+            indextts_instance.api_url: gr.update(value=current_config.get("api_url", "http://127.0.0.1:7860"))
+        }
+    except Exception as e:
+        logger.error(f"恢复配置时出错: {e}")
+        return {}
+
+
+def refresh_config_on_app_load(indextts_instance):
+    """应用加载时刷新配置"""
+    try:
+        current_config = indextts_instance._load_config()
+        logger.info(f"应用加载时刷新Index-TTS配置: {current_config}")
+
+        # 更新组件可见性
+        mode = current_config.get("mode_selection", "内置")
+
+        # 返回与 app_load_outputs 对应的更新值
+        # app_load_outputs = [mode_selection, builtin_audio_selection, builtin_audio_preview,
+        #                    reference_audio, language, do_sample, temperature,
+        #                    top_p, top_k, volume_gain, api_url]
+        return [
+            gr.update(value=mode),  # mode_selection
+            gr.update(
+                value=current_config.get("builtin_audio_selection", "舒朗男声"),
+                visible=(mode == "内置")
+            ),  # builtin_audio_selection
+            gr.update(visible=(mode == "内置")),  # builtin_audio_preview
+            gr.update(visible=(mode == "自定义")),  # reference_audio
+            gr.update(value=current_config.get("language", "中文")),  # language
+            gr.update(value=current_config.get("do_sample", True)),  # do_sample
+            gr.update(value=current_config.get("temperature", 1.0)),  # temperature
+            gr.update(value=current_config.get("top_p", 0.8)),  # top_p
+            gr.update(value=current_config.get("top_k", 30)),  # top_k
+            gr.update(value=current_config.get("volume_gain", 1.0)),  # volume_gain
+            gr.update(value=current_config.get("api_url", "http://127.0.0.1:7860"))  # api_url
+        ]
+    except Exception as e:
+        logger.error(f"应用加载配置刷新失败: {e}")
+        return [gr.update() for _ in range(11)]
 
 
 class IndexTTS(TTSProjet):
@@ -995,32 +1080,6 @@ class IndexTTS(TTSProjet):
             outputs=[self.builtin_audio_preview]
         )
 
-        # 配置保存函数
-        def save_current_config(*args):
-            """保存当前配置"""
-            try:
-                config = {
-                    "mode_selection": args[0],
-                    "builtin_audio_selection": args[1],
-                    "language": args[2],
-                    "do_sample": args[3],
-                    "temperature": args[4],
-                    "top_p": args[5],
-                    "top_k": args[6],
-                    "num_beams": args[7],
-                    "repetition_penalty": args[8],
-                    "length_penalty": args[9],
-                    "max_mel_tokens": args[10],
-                    "volume_gain": args[11],
-                    "max_text_tokens_per_sentence": args[12],
-                    "sentences_bucket_max_size": args[13],
-                    "infer_mode": args[14],
-                    "api_url": args[15]
-                }
-                self._save_config(config)
-            except Exception as e:
-                logger.error(f"保存配置时出错: {e}")
-
         # 绑定配置保存事件 - 当任何参数改变时自动保存
         config_inputs = [
             self.mode_selection,
@@ -1044,62 +1103,12 @@ class IndexTTS(TTSProjet):
         # 为每个配置项绑定保存事件
         for component in config_inputs:
             component.change(
-                fn=save_current_config,
+                fn=lambda *args: save_current_config(self, *args),
                 inputs=config_inputs,
                 outputs=[]
             )
 
-        # 添加标签切换时的配置恢复功能
-        def restore_config_on_tab_switch():
-            """标签切换时恢复配置"""
-            try:
-                current_config = self._load_config()
-                logger.info(f"标签切换时恢复Index-TTS配置: {current_config}")
 
-                # 返回所有组件的更新值
-                return {
-                    self.mode_selection: gr.update(value=current_config.get("mode_selection", "内置")),
-                    self.builtin_audio_selection: gr.update(
-                        value=current_config.get("builtin_audio_selection", "舒朗男声")),
-                    self.language: gr.update(value=current_config.get("language", "中文")),
-                    self.do_sample: gr.update(value=current_config.get("do_sample", True)),
-                    self.temperature: gr.update(value=current_config.get("temperature", 1.0)),
-                    self.top_p: gr.update(value=current_config.get("top_p", 0.8)),
-                    self.top_k: gr.update(value=current_config.get("top_k", 30)),
-                    self.volume_gain: gr.update(value=current_config.get("volume_gain", 1.0)),
-                    self.api_url: gr.update(value=current_config.get("api_url", "http://127.0.0.1:7860"))
-                }
-            except Exception as e:
-                logger.error(f"恢复配置时出错: {e}")
-                return {}
-
-        # 添加应用加载时的配置刷新机制
-        def refresh_config_on_app_load():
-            """应用加载时刷新配置"""
-            try:
-                fresh_config = self._load_config()
-
-                # 更新组件可见性
-                mode = fresh_config.get("mode_selection", "内置")
-                return [
-                    gr.update(value=mode),  # mode_selection
-                    gr.update(
-                        value=fresh_config.get("builtin_audio_selection", "舒朗男声"),
-                        visible=(mode == "内置")
-                    ),  # builtin_audio_selection
-                    gr.update(visible=(mode == "内置")),  # builtin_audio_preview
-                    gr.update(visible=(mode == "自定义")),  # reference_audio
-                    gr.update(value=fresh_config.get("language", "中文")),  # language
-                    gr.update(value=fresh_config.get("do_sample", True)),  # do_sample
-                    gr.update(value=fresh_config.get("temperature", 1.0)),  # temperature
-                    gr.update(value=fresh_config.get("top_p", 0.8)),  # top_p
-                    gr.update(value=fresh_config.get("top_k", 30)),  # top_k
-                    gr.update(value=fresh_config.get("volume_gain", 1.0)),  # volume_gain
-                    gr.update(value=fresh_config.get("api_url", "http://127.0.0.1:7860"))  # api_url
-                ]
-            except Exception as e:
-                logger.error(f"应用加载配置刷新失败: {e}")
-                return [gr.update() for _ in range(11)]
 
         # 在应用加载时自动刷新配置
         # 使用Gradio的load事件
@@ -1131,7 +1140,7 @@ class IndexTTS(TTSProjet):
         ]
 
         # 存储配置刷新函数和输出组件，供外部调用
-        self.refresh_config_on_app_load = refresh_config_on_app_load
+        self.refresh_config_on_app_load = lambda: refresh_config_on_app_load(self)
         self.app_load_outputs = app_load_outputs
 
         return INDEXTTS_ARGS

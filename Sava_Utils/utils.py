@@ -1,14 +1,21 @@
+# 所有import语句统一放在文件顶部
 import os
 import time
 import subprocess
-from . import logger, i18n
-from .librosa_load import get_rms
-import gradio as gr
-import numpy as np
-import csv
-import re
+import tempfile
 import shutil
 import platform
+import csv
+import re
+import gradio as gr
+import numpy as np
+
+# 项目内部导入
+from . import logger, i18n
+from .librosa_load import get_rms
+from .subtitle_processor import format_ass_file, extract_ass_to_srt, get_available_styles, convert_subtitle
+from .subtitle import Subtitles, Subtitle
+from .edit_panel import getworklist, load_page
 import Sava_Utils
 
 
@@ -111,11 +118,6 @@ def file_show(files):
 
         # 处理 ASS 文件
         if file_ext == ".ass":
-            # 导入字幕处理器
-            from .subtitle_processor import format_ass_file, extract_ass_to_srt, get_available_styles
-            import tempfile
-            import os
-
             # 创建临时目录
             temp_dir = tempfile.mkdtemp()
             formatted_ass_path = os.path.join(temp_dir, "formatted.ass")
@@ -148,7 +150,6 @@ def file_show(files):
 
             finally:
                 # 清理临时文件
-                import shutil
                 try:
                     shutil.rmtree(temp_dir)
                 except:
@@ -156,10 +157,6 @@ def file_show(files):
 
         # 处理 VTT 文件
         elif file_ext == ".vtt":
-            from .subtitle_processor import convert_subtitle
-            import tempfile
-            import os
-
             # 创建临时 SRT 文件
             temp_dir = tempfile.mkdtemp()
             srt_output_path = os.path.join(temp_dir, "converted.srt")
@@ -177,7 +174,6 @@ def file_show(files):
 
             finally:
                 # 清理临时文件
-                import shutil
                 try:
                     shutil.rmtree(temp_dir)
                 except:
@@ -425,10 +421,6 @@ def remove_silence(audio, sr, padding_begin=0.1, padding_fin=0.15, threshold_db=
 def read_ass_file(file_name, offset=0):
     """读取 ASS 文件并转换为字幕列表"""
     try:
-        from .subtitle_processor import format_ass_file, extract_ass_to_srt, get_available_styles
-        import tempfile
-        import os
-
         # 创建临时目录
         temp_dir = tempfile.mkdtemp()
         formatted_ass_path = os.path.join(temp_dir, "formatted.ass")
@@ -461,7 +453,6 @@ def read_ass_file(file_name, offset=0):
 
         finally:
             # 清理临时文件
-            import shutil
             try:
                 shutil.rmtree(temp_dir)
             except:
@@ -476,10 +467,6 @@ def read_ass_file(file_name, offset=0):
 def read_vtt_file(file_name, offset=0):
     """读取 VTT 文件并转换为字幕列表"""
     try:
-        from .subtitle_processor import convert_subtitle
-        import tempfile
-        import os
-
         # 创建临时 SRT 文件
         temp_dir = tempfile.mkdtemp()
         srt_output_path = os.path.join(temp_dir, "converted.srt")
@@ -497,7 +484,6 @@ def read_vtt_file(file_name, offset=0):
 
         finally:
             # 清理临时文件
-            import shutil
             try:
                 shutil.rmtree(temp_dir)
             except:
