@@ -325,9 +325,6 @@ class Settings_UI:
             self.gsv_pydir_input,
             self.gsv_dir_input,
             self.gsv_args,
-            self.ms_region,
-            self.ms_key,
-            self.ms_lang_option,
             self.ollama_url,
         ]
 

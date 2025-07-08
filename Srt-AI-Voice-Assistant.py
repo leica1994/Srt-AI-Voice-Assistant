@@ -163,8 +163,8 @@ def export_subtitle_with_new_name(file_list, subtitle_state):
 
             gr.Info(f"字幕文件已导出: {len(exported_files)} 个文件")
 
-            # 返回原始文件列表 + 新导出的文件
-            return original_files + exported_files
+            # 只返回原始文件列表，不包含导出的文件（避免更新上传组件）
+            return original_files
         else:
             # 如果导出失败，返回原始文件列表
             return original_files

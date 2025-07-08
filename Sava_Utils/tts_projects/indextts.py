@@ -52,7 +52,8 @@ class IndexTTS(TTSProjet):
             "温柔学姐": "builtin_audios/Chinese (Mandarin)_Gentle_Senior.mp3",
             "嘴硬竹马": "builtin_audios/Chinese (Mandarin)_Stubborn_Friend.mp3",
             "清脆少女": "builtin_audios/Chinese (Mandarin)_Crisp_Girl.mp3",
-            "清澈邻家弟弟": "builtin_audios/Chinese (Mandarin)_Pure-hearted_Boy.mp3"
+            "清澈邻家弟弟": "builtin_audios/Chinese (Mandarin)_Pure-hearted_Boy.mp3",
+            "软软女孩": "builtin_audios/Chinese (Mandarin)_Soft_Girl.mp3"
         }
 
     def get_default_builtin_audio(self):
