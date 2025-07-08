@@ -23,6 +23,54 @@ current_path = os.environ.get("current_path")
 class IndexTTS(TTSProjet):
     def __init__(self, config):
         super().__init__("indextts", config)
+        self.config_file = os.path.join(current_path, "SAVAdata", "indextts_config.json")
+        self._ensure_config_dir()
+
+    def _ensure_config_dir(self):
+        """确保配置目录存在"""
+        config_dir = os.path.dirname(self.config_file)
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir, exist_ok=True)
+
+    def _load_config(self):
+        """加载配置"""
+        try:
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                logger.info(f"已加载Index-TTS配置: {config}")
+                return config
+        except Exception as e:
+            logger.warning(f"加载Index-TTS配置失败: {e}")
+
+        # 返回默认配置
+        return {
+            "mode_selection": "内置",
+            "builtin_audio_selection": "舒朗男声",
+            "language": "中文",
+            "do_sample": True,
+            "temperature": 1.0,
+            "top_p": 0.8,
+            "top_k": 30,
+            "num_beams": 3,
+            "repetition_penalty": 10.0,
+            "length_penalty": 0.0,
+            "max_mel_tokens": 600,
+            "volume_gain": 1.0,
+            "max_text_tokens_per_sentence": 120,
+            "sentences_bucket_max_size": 4,
+            "infer_mode": "普通推理",
+            "api_url": "http://127.0.0.1:7860"
+        }
+
+    def _save_config(self, config):
+        """保存配置"""
+        try:
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+            logger.info(f"已保存Index-TTS配置: {config}")
+        except Exception as e:
+            logger.error(f"保存Index-TTS配置失败: {e}")
 
     def get_builtin_audio_map(self):
         """获取内置音频映射表"""
@@ -458,6 +506,53 @@ class IndexTTS(TTSProjet):
             logger.error(f"音频活动检测失败 {audio_path}: {str(e)}")
             return False, 0.0, 0.0
 
+    def _apply_volume_gain(self, audio_data, volume_gain):
+        """
+        对音频数据应用音量增益
+
+        Args:
+            audio_data: 音频数据（bytes格式）
+            volume_gain: 音量增益倍数
+
+        Returns:
+            bytes: 处理后的音频数据
+        """
+        try:
+            import io
+            import numpy as np
+            import soundfile as sf
+
+            # 如果音量增益为1.0，直接返回原音频
+            if volume_gain == 1.0:
+                return audio_data
+
+            logger.info(f"正在应用音量增益: {volume_gain}x")
+
+            # 将音频数据转换为numpy数组
+            audio_io = io.BytesIO(audio_data)
+            audio_array, sample_rate = sf.read(audio_io)
+
+            # 应用音量增益
+            audio_array = audio_array * volume_gain
+
+            # 防止音频削波（限制在-1到1之间）
+            audio_array = np.clip(audio_array, -1.0, 1.0)
+
+            # 转换回音频数据
+            output_io = io.BytesIO()
+            sf.write(output_io, audio_array, sample_rate, format='WAV')
+            output_io.seek(0)
+
+            enhanced_audio = output_io.read()
+            logger.info(f"音量增益应用成功，原始大小: {len(audio_data)} bytes，处理后大小: {len(enhanced_audio)} bytes")
+
+            return enhanced_audio
+
+        except Exception as e:
+            logger.error(f"音量增益应用失败: {e}")
+            # 如果处理失败，返回原始音频
+            return audio_data
+
     def api(self, api_url, text, reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k,
             top_p, temperature,
             num_beams, repetition_penalty, length_penalty, max_mel_tokens,
@@ -567,7 +662,7 @@ class IndexTTS(TTSProjet):
 
     def save_action(self, *args, text: str = None):
         """保存操作，调用API并返回音频数据"""
-        reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k, top_p, temperature, num_beams, repetition_penalty, length_penalty, max_mel_tokens, max_text_tokens_per_sentence, sentences_bucket_max_size, infer_mode, api_url = args
+        reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k, top_p, temperature, num_beams, repetition_penalty, length_penalty, max_mel_tokens, volume_gain, max_text_tokens_per_sentence, sentences_bucket_max_size, infer_mode, api_url = args
 
         # 字幕文本格式化处理
         if text:
@@ -596,10 +691,18 @@ class IndexTTS(TTSProjet):
             sentences_bucket_max_size=sentences_bucket_max_size,
             infer_mode=infer_mode
         )
+
+        # 应用音量增益
+        if audio and volume_gain != 1.0:
+            audio = self._apply_volume_gain(audio, volume_gain)
+
         return audio
 
     def _UI(self):
         """创建Index-TTS的UI界面"""
+        # 加载配置
+        saved_config = self._load_config()
+
         with gr.TabItem("🔥 Index-TTS"):
             with gr.Column():
 
@@ -607,7 +710,7 @@ class IndexTTS(TTSProjet):
                 self.mode_selection = gr.Radio(
                     label="参考音频模式",
                     choices=["内置", "clone", "自定义"],
-                    value="内置",
+                    value=saved_config.get("mode_selection", "内置"),
                     interactive=True
                 )
 
@@ -625,8 +728,8 @@ class IndexTTS(TTSProjet):
                         "真诚青年", "温柔学姐", "嘴硬竹马",
                         "清脆少女", "清澈邻家弟弟", "软软女孩"
                     ],
-                    value="舒朗男声",
-                    visible=True,
+                    value=saved_config.get("builtin_audio_selection", "舒朗男声"),
+                    visible=saved_config.get("mode_selection", "内置") == "内置",
                     interactive=True
                 )
 
@@ -650,18 +753,19 @@ class IndexTTS(TTSProjet):
                 self.language = gr.Dropdown(
                     label=i18n("Inference text language"),
                     choices=["中文", "英文", "日文", "中英混合", "日英混合", "中英日混合"],
-                    value="中文",
+                    value=saved_config.get("language", "中文"),
                     interactive=True
                 )
 
                 with gr.Accordion("🔧 高级合成参数", open=False):
-                    # 采样设置组
-                    with gr.Group():
-                        gr.Markdown("#### 🎯 采样控制")
-                        with gr.Row():
+                    # 第一行：采样控制和音频控制
+                    with gr.Row():
+                        # 采样设置组
+                        with gr.Group():
+                            gr.Markdown("#### 🎯 采样控制")
                             self.do_sample = gr.Checkbox(
                                 label="启用采样",
-                                value=True,
+                                value=saved_config.get("do_sample", True),
                                 interactive=True,
                                 info="开启后使用随机采样，关闭则使用贪心搜索"
                             )
@@ -669,20 +773,41 @@ class IndexTTS(TTSProjet):
                                 minimum=0.1,
                                 maximum=2.0,
                                 step=0.1,
-                                value=1.0,
+                                value=saved_config.get("temperature", 1.0),
                                 label="Temperature",
                                 info="控制生成的随机性，值越高越随机"
                             )
 
-                    # 生成策略组
-                    with gr.Group():
-                        gr.Markdown("#### 🎲 生成策略")
-                        with gr.Row():
+                        # 音频生成控制组
+                        with gr.Group():
+                            gr.Markdown("#### 🎵 音频控制")
+                            self.max_mel_tokens = gr.Slider(
+                                minimum=50,
+                                maximum=800,
+                                step=10,
+                                value=saved_config.get("max_mel_tokens", 600),
+                                label="最大音频Token数",
+                                info="控制生成音频的最大长度，过小会导致音频被截断"
+                            )
+                            self.volume_gain = gr.Slider(
+                                minimum=0.1,
+                                maximum=5.0,
+                                step=0.1,
+                                value=saved_config.get("volume_gain", 1.0),
+                                label="音量增益",
+                                info="音频音量倍数，1.0为原始音量，>1.0增强音量，最大5.0倍"
+                            )
+
+                    # 第二行：生成策略和惩罚机制
+                    with gr.Row():
+                        # 生成策略组
+                        with gr.Group():
+                            gr.Markdown("#### 🎲 生成策略")
                             self.top_p = gr.Slider(
                                 minimum=0,
                                 maximum=1,
                                 step=0.01,
-                                value=0.8,
+                                value=saved_config.get("top_p", 0.8),
                                 label="Top-P",
                                 info="核采样概率阈值，控制词汇选择范围"
                             )
@@ -690,7 +815,7 @@ class IndexTTS(TTSProjet):
                                 minimum=0,
                                 maximum=100,
                                 step=1,
-                                value=30,
+                                value=saved_config.get("top_k", 30),
                                 label="Top-K",
                                 info="保留概率最高的K个词汇"
                             )
@@ -698,20 +823,19 @@ class IndexTTS(TTSProjet):
                                 minimum=1,
                                 maximum=10,
                                 step=1,
-                                value=3,
+                                value=saved_config.get("num_beams", 3),
                                 label="Beam Size",
                                 info="束搜索大小，值越大质量越高但速度越慢"
                             )
 
-                    # 惩罚机制组
-                    with gr.Group():
-                        gr.Markdown("#### ⚖️ 惩罚机制")
-                        with gr.Row():
+                        # 惩罚机制组
+                        with gr.Group():
+                            gr.Markdown("#### ⚖️ 惩罚机制")
                             self.repetition_penalty = gr.Slider(
                                 minimum=1.0,
                                 maximum=20.0,
                                 step=0.1,
-                                value=10.0,
+                                value=saved_config.get("repetition_penalty", 10.0),
                                 label="重复惩罚",
                                 info="防止重复生成，值越大惩罚越重"
                             )
@@ -719,33 +843,21 @@ class IndexTTS(TTSProjet):
                                 minimum=-2.0,
                                 maximum=2.0,
                                 step=0.1,
-                                value=0.0,
+                                value=saved_config.get("length_penalty", 0.0),
                                 label="长度惩罚",
                                 info="控制生成长度，正值偏好长句，负值偏好短句"
                             )
 
-                    # 音频生成控制组
-                    with gr.Group():
-                        gr.Markdown("#### 🎵 音频生成控制")
-                        self.max_mel_tokens = gr.Slider(
-                            minimum=50,
-                            maximum=800,
-                            step=10,
-                            value=600,
-                            label="最大音频Token数",
-                            info="控制生成音频的最大长度，过小会导致音频被截断",
-                            elem_classes=["full-width-slider"]
-                        )
-
-                    # 分句处理组
-                    with gr.Group():
-                        gr.Markdown("#### 📝 分句处理 *影响音频质量和生成速度*")
-                        with gr.Row():
+                    # 第三行：分句处理和推理模式
+                    with gr.Row():
+                        # 分句处理组
+                        with gr.Group():
+                            gr.Markdown("#### 📝 分句处理")
                             self.max_text_tokens_per_sentence = gr.Slider(
                                 minimum=20,
                                 maximum=600,
                                 step=10,
-                                value=120,
+                                value=saved_config.get("max_text_tokens_per_sentence", 120),
                                 label="单句最大Token数",
                                 info="推荐 20-300，值越大单次处理越长，过小会增加推理次数"
                             )
@@ -753,26 +865,26 @@ class IndexTTS(TTSProjet):
                                 minimum=1,
                                 maximum=16,
                                 step=1,
-                                value=4,
+                                value=saved_config.get("sentences_bucket_max_size", 4),
                                 label="批次处理容量",
                                 info="推荐 2-8，值越大批次越大，过大可能显存溢出"
                             )
 
-                    # 推理模式组
-                    with gr.Group():
-                        gr.Markdown("#### 🚀 推理模式")
-                        self.infer_mode = gr.Radio(
-                            label="选择推理模式",
-                            choices=["普通推理", "批次推理"],
-                            value="普通推理",
-                            interactive=True,
-                            info="批次推理速度更快但占用更多显存"
-                        )
+                        # 推理模式组
+                        with gr.Group():
+                            gr.Markdown("#### 🚀 推理模式")
+                            self.infer_mode = gr.Radio(
+                                label="选择推理模式",
+                                choices=["普通推理", "批次推理"],
+                                value=saved_config.get("infer_mode", "普通推理"),
+                                interactive=True,
+                                info="批次推理速度更快但占用更多显存"
+                            )
 
                 # API服务地址
                 self.api_url = gr.Textbox(
                     label="服务地址",
-                    value="http://127.0.0.1:7860",
+                    value=saved_config.get("api_url", "http://127.0.0.1:7860"),
                     placeholder="请输入Index-TTS服务地址，如: http://127.0.0.1:7860",
                     interactive=True
                 )
@@ -834,6 +946,60 @@ class IndexTTS(TTSProjet):
             outputs=[self.builtin_audio_preview]
         )
 
+        # 配置保存函数
+        def save_current_config(*args):
+            """保存当前配置"""
+            try:
+                config = {
+                    "mode_selection": args[0],
+                    "builtin_audio_selection": args[1],
+                    "language": args[2],
+                    "do_sample": args[3],
+                    "temperature": args[4],
+                    "top_p": args[5],
+                    "top_k": args[6],
+                    "num_beams": args[7],
+                    "repetition_penalty": args[8],
+                    "length_penalty": args[9],
+                    "max_mel_tokens": args[10],
+                    "volume_gain": args[11],
+                    "max_text_tokens_per_sentence": args[12],
+                    "sentences_bucket_max_size": args[13],
+                    "infer_mode": args[14],
+                    "api_url": args[15]
+                }
+                self._save_config(config)
+            except Exception as e:
+                logger.error(f"保存配置时出错: {e}")
+
+        # 绑定配置保存事件 - 当任何参数改变时自动保存
+        config_inputs = [
+            self.mode_selection,
+            self.builtin_audio_selection,
+            self.language,
+            self.do_sample,
+            self.temperature,
+            self.top_p,
+            self.top_k,
+            self.num_beams,
+            self.repetition_penalty,
+            self.length_penalty,
+            self.max_mel_tokens,
+            self.volume_gain,
+            self.max_text_tokens_per_sentence,
+            self.sentences_bucket_max_size,
+            self.infer_mode,
+            self.api_url
+        ]
+
+        # 为每个配置项绑定保存事件
+        for component in config_inputs:
+            component.change(
+                fn=save_current_config,
+                inputs=config_inputs,
+                outputs=[]
+            )
+
         # 返回参数列表，按照其他TTS项目的格式
         INDEXTTS_ARGS = [
             self.reference_audio,
@@ -848,6 +1014,7 @@ class IndexTTS(TTSProjet):
             self.repetition_penalty,
             self.length_penalty,
             self.max_mel_tokens,
+            self.volume_gain,
             self.max_text_tokens_per_sentence,
             self.sentences_bucket_max_size,
             self.infer_mode,
@@ -862,7 +1029,7 @@ class IndexTTS(TTSProjet):
 
     def arg_filter(self, *args):
         """参数过滤，按照项目规范处理参数"""
-        in_file, fps, offset, max_workers, reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k, top_p, temperature, num_beams, repetition_penalty, length_penalty, max_mel_tokens, max_text_tokens_per_sentence, sentences_bucket_max_size, infer_mode, port = args
+        in_file, fps, offset, max_workers, reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k, top_p, temperature, num_beams, repetition_penalty, length_penalty, max_mel_tokens, volume_gain, max_text_tokens_per_sentence, sentences_bucket_max_size, infer_mode, port = args
 
         # 根据模式验证必要参数
         if mode_selection == "自定义" and not reference_audio:
@@ -881,7 +1048,7 @@ class IndexTTS(TTSProjet):
                 raise Exception("🎵 未找到音频分割片段！\n\n🔄 请确保视频文件已正确加载并完成音频分割处理。")
 
         pargs = (reference_audio, mode_selection, builtin_audio_selection, language, do_sample, top_k, top_p,
-                 temperature, num_beams, repetition_penalty, length_penalty, max_mel_tokens,
+                 temperature, num_beams, repetition_penalty, length_penalty, max_mel_tokens, volume_gain,
                  max_text_tokens_per_sentence, sentences_bucket_max_size, infer_mode, port)
         kwargs = {'in_files': in_file, 'fps': fps, 'offset': offset, 'proj': "indextts", 'max_workers': max_workers}
         return pargs, kwargs
