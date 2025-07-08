@@ -602,12 +602,45 @@ def remake(*args):
         if subtitle_list.proj is None:
             gr.Info(i18n('You must specify the speakers while using multi-speaker dubbing!'))
             return fp, *load_single_line(subtitle_list, idx)
-        # args = [None, *args]  # ~~fill data~~
+        # 为单条生成构造正确的参数格式
+        # 单条生成时需要模拟批量生成的参数格式：[input_file, fps, offset, workers, *TTS_ARGS]
         try:
             proj = subtitle_list.proj
-            args, kwargs = Projet_dict[proj].arg_filter(*args)
+            # 从 remake 函数的 args 中提取 TTS 相关参数（跳过前4个：page, idx, timestamp, s_txt）
+            tts_args = args[4:]  # 获取 TTS 项目的参数
+
+            # 根据参数数量自动判断实际的 TTS 项目类型
+            if len(tts_args) == 4:  # EdgeTTS: language, speaker, rate, pitch
+                actual_proj = "edgetts"
+                logger.info(f"🔍 根据参数数量({len(tts_args)})判断为 EdgeTTS")
+            elif len(tts_args) == 17:  # IndexTTS: 17个参数
+                actual_proj = "indextts"
+                logger.info(f"🔍 根据参数数量({len(tts_args)})判断为 IndexTTS")
+            elif len(tts_args) == 20:  # GSV: 20个参数
+                actual_proj = "gsv"
+                logger.info(f"🔍 根据参数数量({len(tts_args)})判断为 GSV")
+            else:
+                # 如果参数数量不匹配，使用原来的项目设置
+                actual_proj = proj
+                logger.warning(f"⚠️ 无法根据参数数量({len(tts_args)})判断项目类型，使用原设置: {proj}")
+
+            # 构造与批量生成相同的参数格式
+            formatted_args = [
+                None,  # input_file (单条生成时不需要)
+                30,    # fps (默认值)
+                0,     # offset (默认值)
+                1,     # workers (单条生成时使用1个worker)
+                *tts_args  # TTS项目的具体参数
+            ]
+
+            logger.info(f"🔧 单条生成参数格式化 - 项目: {actual_proj}, 参数数量: {len(formatted_args)}")
+            args, kwargs = Projet_dict[actual_proj].arg_filter(*formatted_args)
+            proj = actual_proj  # 更新项目类型
         except Exception as e:
-            # print(e)
+            logger.error(f"❌ 参数过滤失败 - 项目: {subtitle_list.proj}, 错误: {str(e)}")
+            logger.error(f"🔍 原始参数: {args}")
+            logger.error(f"🔍 TTS参数: {args[4:] if len(args) > 4 else 'N/A'}")
+            gr.Warning(f"参数过滤失败: {str(e)}")
             return fp, *load_single_line(subtitle_list, idx)
     Projet_dict[proj].before_gen_action(*args, config=Sava_Utils.config, notify=False, force=False)
     # subtitle_list[idx].text = s_txt
