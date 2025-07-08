@@ -297,11 +297,6 @@ class Settings_UI:
                 self.gsv_dir_input = gr.Textbox(label=i18n('Root Path of GSV'), interactive=True, value=Sava_Utils.config.gsv_dir)
                 self.gsv_args = gr.Textbox(label=i18n('Start Parameters'), interactive=True, value=Sava_Utils.config.gsv_args)
             with gr.Group():
-                gr.Markdown(value="Azure-TTS(Microsoft)")
-                self.ms_region = gr.Textbox(label="Server Region", interactive=True, value=Sava_Utils.config.ms_region)
-                self.ms_key = gr.Textbox(label=i18n('KEY Warning: Key is stored in plaintext. DO NOT send the key to others or share your configuration file!'), interactive=True, value=Sava_Utils.config.ms_key)
-                self.ms_lang_option = gr.Textbox(label=i18n('Select required languages, separated by commas or spaces.'), interactive=True, value=Sava_Utils.config.ms_lang_option)
-            with gr.Group():
                 gr.Markdown(value=i18n('Translation Module'))
                 self.ollama_url = gr.Textbox(label=i18n('Default Request Address for Ollama'), interactive=True, value=Sava_Utils.config.ollama_url)
 
