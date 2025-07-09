@@ -984,7 +984,7 @@ class IndexTTS(TTSProjet):
                                 step=1,
                                 value=saved_config.get("num_beams", 3),
                                 label="Beam Size",
-                                info="束搜索大小，值越大质量越高但速度越慢"
+                                info="约束搜索大小，值越大质量越高但速度越慢"
                             )
 
                         # 惩罚机制组

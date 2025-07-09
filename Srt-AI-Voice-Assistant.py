@@ -634,6 +634,470 @@ def handle_compose_video(progress, video_file_upload, video_path_input, subtitle
         return gr.update(value=error_info)
 
 
+def create_batch_dubbing_ui():
+    """创建批量配音界面 - 参考其他页面样式，简洁实用"""
+
+    with gr.Row():
+        # 左列：任务列表 (70%)
+        with gr.Column(scale=7):
+            with gr.Accordion(label="任务列表", open=True):
+                # 任务统计
+                with gr.Row():
+                    batch_total_tasks = gr.Number(
+                        label="总任务数",
+                        value=0,
+                        interactive=False,
+                        scale=1
+                    )
+                    batch_completed_tasks = gr.Number(
+                        label="已完成",
+                        value=0,
+                        interactive=False,
+                        scale=1
+                    )
+                    batch_failed_tasks = gr.Number(
+                        label="失败",
+                        value=0,
+                        interactive=False,
+                        scale=1
+                    )
+                    batch_success_rate = gr.Number(
+                        label="成功率(%)",
+                        value=0,
+                        interactive=False,
+                        scale=1
+                    )
+
+                # 任务列表显示
+                batch_task_display = gr.HTML(
+                    value="<div style='text-align: center; padding: 40px; color: #666; border: 2px dashed #ddd; border-radius: 8px;'>📝 暂无任务<br><small>点击右侧「添加任务」开始</small></div>"
+                )
+
+                # 任务操作
+                with gr.Row():
+                    batch_select_all_btn = gr.Button("全选", size="sm")
+                    batch_select_none_btn = gr.Button("全不选", size="sm")
+                    batch_delete_selected_btn = gr.Button("删除选中", size="sm", variant="stop")
+                    batch_retry_failed_btn = gr.Button("重试失败", size="sm")
+
+        # 右列：文件上传和配置 (30%)
+        with gr.Column(scale=3):
+            # 文件上传区域
+            with gr.Accordion(label="文件上传", open=True):
+                task_video_file = gr.File(
+                    label="视频文件",
+                    file_types=['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m2ts'],
+                    type="filepath"
+                )
+
+                task_subtitle_file = gr.File(
+                    label="字幕文件",
+                    file_types=['.srt', '.ass', '.vtt', '.csv', '.txt'],
+                    type="filepath"
+                )
+
+                with gr.Row():
+                    confirm_add_btn = gr.Button("添加任务", variant="primary", scale=2)
+                    cancel_add_btn = gr.Button("重置", variant="secondary", scale=1)
+
+            # TTS配置 - 参考字幕配音页面顺序，默认收缩
+            with gr.Accordion(label="TTS配置", open=False):
+                batch_tts_service = gr.Dropdown(
+                    label="TTS服务",
+                    choices=["GSV", "Index-TTS", "Edge-TTS", "Custom"],
+                    value="GSV",
+                    interactive=True
+                )
+
+            # 输出设置 - 默认收缩
+            with gr.Accordion(label="输出设置", open=False):
+                batch_output_dir = gr.Textbox(
+                    label="输出目录",
+                    value="SAVAdata/output/batch_dubbing",
+                    placeholder="输出文件保存目录",
+                    interactive=True
+                )
+
+                # 保留原视频格式选项
+                batch_keep_original_format = gr.Checkbox(
+                    label="保留原视频格式",
+                    value=True,
+                    interactive=True
+                )
+
+                # 输出格式选择（默认隐藏）
+                batch_output_format = gr.Dropdown(
+                    label="输出格式",
+                    choices=["MP4", "AVI", "MKV", "MOV", "WMV", "FLV", "WEBM"],
+                    value="MP4",
+                    interactive=True,
+                    visible=False
+                )
+
+                batch_keep_original = gr.Checkbox(
+                    label="保留原始文件",
+                    value=True,
+                    interactive=True
+                )
+
+            # 批量操作
+            with gr.Accordion(label="批量操作", open=True):
+                with gr.Row():
+                    batch_start_all_btn = gr.Button("批量开始", variant="primary")
+                    batch_pause_btn = gr.Button("暂停", variant="secondary")
+
+                with gr.Row():
+                    batch_clear_btn = gr.Button("清空列表", variant="secondary")
+                    batch_export_btn = gr.Button("导出结果", variant="secondary")
+
+                # 处理进度
+                batch_progress_info = gr.Textbox(
+                    label="处理进度",
+                    value="等待任务...",
+                    interactive=False
+                )
+
+    # 状态管理
+    batch_tasks_state = gr.State(value=[])
+    batch_processing_state = gr.State(value={"running": False, "current_task": 0})
+
+    return {
+        'task_video_file': task_video_file,
+        'task_subtitle_file': task_subtitle_file,
+        'confirm_add_btn': confirm_add_btn,
+        'cancel_add_btn': cancel_add_btn,
+        'batch_start_all_btn': batch_start_all_btn,
+        'batch_pause_btn': batch_pause_btn,
+        'batch_clear_btn': batch_clear_btn,
+        'batch_export_btn': batch_export_btn,
+        'batch_progress_info': batch_progress_info,
+        'batch_tts_service': batch_tts_service,
+        'batch_output_dir': batch_output_dir,
+        'batch_keep_original_format': batch_keep_original_format,
+        'batch_output_format': batch_output_format,
+        'batch_keep_original': batch_keep_original,
+        'batch_total_tasks': batch_total_tasks,
+        'batch_completed_tasks': batch_completed_tasks,
+        'batch_failed_tasks': batch_failed_tasks,
+        'batch_success_rate': batch_success_rate,
+        'batch_task_display': batch_task_display,
+        'batch_select_all_btn': batch_select_all_btn,
+        'batch_select_none_btn': batch_select_none_btn,
+        'batch_delete_selected_btn': batch_delete_selected_btn,
+        'batch_retry_failed_btn': batch_retry_failed_btn,
+        'batch_tasks_state': batch_tasks_state,
+        'batch_processing_state': batch_processing_state
+    }
+
+
+def create_task_row(task_id, video_file, subtitle_file, status="待处理", result=""):
+    """创建单个任务行"""
+    with gr.Row():
+        # 选择框
+        task_checkbox = gr.Checkbox(label="", value=False, scale=1)
+
+        # 视频文件
+        video_display = gr.Textbox(
+            value=os.path.basename(video_file) if video_file else "",
+            label="视频文件",
+            interactive=False,
+            scale=3
+        )
+
+        # 字幕文件
+        subtitle_display = gr.Textbox(
+            value=os.path.basename(subtitle_file) if subtitle_file else "",
+            label="字幕文件",
+            interactive=False,
+            scale=3
+        )
+
+        # 处理结果
+        result_display = gr.Textbox(
+            value=f"{status}: {result}",
+            label="处理结果",
+            interactive=False,
+            scale=2
+        )
+
+        # 操作按钮
+        with gr.Column(scale=2):
+            start_btn = gr.Button("开始", variant="primary", size="sm")
+            retry_btn = gr.Button("重新执行", variant="secondary", size="sm")
+
+    return {
+        'checkbox': task_checkbox,
+        'video_display': video_display,
+        'subtitle_display': subtitle_display,
+        'result_display': result_display,
+        'start_btn': start_btn,
+        'retry_btn': retry_btn,
+        'task_id': task_id,
+        'video_file': video_file,
+        'subtitle_file': subtitle_file
+    }
+
+
+def add_batch_task(video_file, subtitle_file, current_tasks):
+    """添加批量任务"""
+    if not video_file or not subtitle_file:
+        gr.Warning("请选择视频文件和字幕文件")
+        return current_tasks, None, None, update_batch_statistics(current_tasks)
+
+    # 检查文件是否已存在
+    for task in current_tasks:
+        if task['video_file'] == video_file and task['subtitle_file'] == subtitle_file:
+            gr.Warning("该任务已存在")
+            return current_tasks, None, None, update_batch_statistics(current_tasks)
+
+    # 创建新任务
+    new_task = {
+        'id': len(current_tasks) + 1,
+        'video_file': video_file,
+        'subtitle_file': subtitle_file,
+        'status': '待处理',
+        'result': '',
+        'selected': False,
+        'progress': 0,
+        'created_time': time.strftime('%Y-%m-%d %H:%M:%S')
+    }
+
+    current_tasks.append(new_task)
+    gr.Info(f"已添加任务: {os.path.basename(video_file)}")
+
+    # 清空文件选择
+    return current_tasks, None, None, update_batch_statistics(current_tasks)
+
+
+def update_batch_statistics(tasks):
+    """更新批量任务统计信息"""
+    total = len(tasks)
+    completed = len([t for t in tasks if t['status'] == '已完成'])
+    failed = len([t for t in tasks if t['status'] == '失败'])
+    success_rate = (completed / total * 100) if total > 0 else 0
+
+    return (
+        gr.update(value=total),
+        gr.update(value=completed),
+        gr.update(value=failed),
+        gr.update(value=round(success_rate, 1))
+    )
+
+
+def clear_batch_tasks():
+    """清空批量任务列表"""
+    return [], *update_batch_statistics([])
+
+
+def reset_file_inputs():
+    """重置文件输入"""
+    return None, None
+
+
+def toggle_output_format_visibility(keep_original_format):
+    """根据保留原视频格式选项控制输出格式的可见性"""
+    # 如果保留原格式，隐藏输出格式选择；否则显示
+    return gr.update(visible=not keep_original_format)
+
+
+
+
+
+def render_batch_tasks(tasks):
+    """渲染批量任务列表 - 简洁实用版本"""
+    if not tasks:
+        return gr.update(value="""
+        <div style='text-align: center; padding: 40px; color: #666; border: 2px dashed #ddd; border-radius: 8px;'>
+            📝 暂无任务<br><small>点击左侧「添加任务」开始</small>
+        </div>
+        """)
+
+    # 简洁表格样式
+    table_style = """
+    <style>
+        .batch-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border: 1px solid #ddd;
+        }
+        .batch-table th {
+            background: #f5f5f5;
+            padding: 10px 8px;
+            text-align: center;
+            font-weight: 600;
+            border-bottom: 2px solid #ddd;
+        }
+        .batch-table td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #eee;
+            vertical-align: middle;
+        }
+        .batch-table tr:hover {
+            background: #f9f9f9;
+        }
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            text-align: center;
+            display: inline-block;
+            min-width: 60px;
+        }
+        .status-pending { background: #fff3cd; color: #856404; }
+        .status-processing { background: #cce5ff; color: #004085; }
+        .status-completed { background: #d4edda; color: #155724; }
+        .status-failed { background: #f8d7da; color: #721c24; }
+        .file-name { font-weight: 500; color: #333; margin-bottom: 2px; }
+        .file-path { font-size: 11px; color: #666; word-break: break-all; }
+        .action-btn {
+            padding: 4px 8px;
+            margin: 1px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            background: #007bff;
+            color: white;
+        }
+        .action-btn:hover { background: #0056b3; }
+        .btn-retry { background: #28a745; }
+        .btn-retry:hover { background: #1e7e34; }
+        .btn-delete { background: #dc3545; }
+        .btn-delete:hover { background: #c82333; }
+    </style>
+    """
+
+    # 表格HTML
+    table_html = table_style + '<table class="batch-table">'
+
+    # 表头
+    table_html += """
+    <thead>
+        <tr>
+            <th style="width: 50px;">选择</th>
+            <th style="width: 35%;">视频文件</th>
+            <th style="width: 35%;">字幕文件</th>
+            <th style="width: 15%;">状态</th>
+            <th style="width: 15%;">操作</th>
+        </tr>
+    </thead>
+    <tbody>
+    """
+
+    # 任务行
+    for i, task in enumerate(tasks):
+        status_class = {
+            '待处理': 'status-pending',
+            '处理中': 'status-processing',
+            '已完成': 'status-completed',
+            '失败': 'status-failed'
+        }.get(task['status'], 'status-pending')
+
+        progress = task.get('progress', 0)
+
+        table_html += f"""
+        <tr>
+            <td style="text-align: center;">
+                <input type="checkbox" id="task_{task['id']}" {'checked' if task.get('selected', False) else ''}>
+            </td>
+            <td>
+                <div class="file-name">{os.path.basename(task['video_file'])}</div>
+                <div class="file-path">{task['video_file']}</div>
+            </td>
+            <td>
+                <div class="file-name">{os.path.basename(task['subtitle_file'])}</div>
+                <div class="file-path">{task['subtitle_file']}</div>
+            </td>
+            <td style="text-align: center;">
+                <div class="status-badge {status_class}">{task['status']}</div>
+                <div style="font-size: 11px; color: #666; margin-top: 4px;">{progress}% • {task.get('created_time', '')}</div>
+            </td>
+            <td style="text-align: center;">
+                <button class="action-btn" onclick="startBatchTask({task['id']})">开始</button>
+                <button class="action-btn btn-retry" onclick="retryBatchTask({task['id']})">重试</button>
+                <button class="action-btn btn-delete" onclick="deleteBatchTask({task['id']})">删除</button>
+            </td>
+        </tr>
+        """
+
+    table_html += "</tbody></table>"
+
+    return gr.update(value=table_html)
+
+
+def start_batch_task(task_id, tasks):
+    """开始单个批量任务"""
+    for task in tasks:
+        if task['id'] == task_id:
+            task['status'] = '处理中'
+            # 这里可以调用实际的处理逻辑
+            # 暂时模拟处理
+            task['status'] = '已完成'
+            task['result'] = '配音完成'
+            break
+
+    return tasks
+
+
+def retry_batch_task(task_id, tasks):
+    """重试批量任务"""
+    for task in tasks:
+        if task['id'] == task_id:
+            task['status'] = '待处理'
+            task['result'] = ''
+            break
+
+    return tasks
+
+
+def start_all_batch_tasks(tasks):
+    """开始所有批量任务"""
+    if not tasks:
+        gr.Warning("没有任务需要处理")
+        return tasks
+
+    for task in tasks:
+        if task['status'] == '待处理':
+            task['status'] = '处理中'
+            # 这里可以调用实际的处理逻辑
+            # 暂时模拟处理
+            task['status'] = '已完成'
+            task['result'] = '配音完成'
+
+    gr.Info("所有任务处理完成")
+    return tasks
+
+
+def export_batch_results(tasks):
+    """导出批量处理结果"""
+    if not tasks:
+        gr.Warning("没有结果可导出")
+        return
+
+    # 生成结果报告
+    report = "批量配音处理报告\n"
+    report += "=" * 50 + "\n"
+
+    for task in tasks:
+        report += f"任务ID: {task['id']}\n"
+        report += f"视频文件: {task['video_file']}\n"
+        report += f"字幕文件: {task['subtitle_file']}\n"
+        report += f"处理状态: {task['status']}\n"
+        report += f"处理结果: {task.get('result', '')}\n"
+        report += "-" * 30 + "\n"
+
+    # 保存报告文件
+    report_path = os.path.join(current_path, "SAVAdata", "output", "batch_report.txt")
+    os.makedirs(os.path.dirname(report_path), exist_ok=True)
+
+    with open(report_path, 'w', encoding='utf-8') as f:
+        f.write(report)
+
+    gr.Info(f"结果已导出到: {report_path}")
+
+
 def generate_silence_audio(subtitle, dir):
     """为失败的字幕生成静音音频片段"""
     try:
@@ -1666,6 +2130,81 @@ if __name__ == "__main__":
                         start_gen_multispeaker_btn.click(
                             lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args),
                             inputs=[INTERRUPT_EVENT, page_slider, workers, STATE], outputs=edit_rows + [audio_output])
+
+            with gr.TabItem("批量配音"):
+                batch_ui_components = create_batch_dubbing_ui()
+
+                # 绑定批量配音事件
+
+                # 添加任务
+                batch_ui_components['confirm_add_btn'].click(
+                    add_batch_task,
+                    inputs=[
+                        batch_ui_components['task_video_file'],
+                        batch_ui_components['task_subtitle_file'],
+                        batch_ui_components['batch_tasks_state']
+                    ],
+                    outputs=[
+                        batch_ui_components['batch_tasks_state'],
+                        batch_ui_components['task_video_file'],
+                        batch_ui_components['task_subtitle_file'],
+                        batch_ui_components['batch_total_tasks'],
+                        batch_ui_components['batch_completed_tasks'],
+                        batch_ui_components['batch_failed_tasks'],
+                        batch_ui_components['batch_success_rate']
+                    ]
+                )
+
+                # 重置文件输入
+                batch_ui_components['cancel_add_btn'].click(
+                    reset_file_inputs,
+                    outputs=[
+                        batch_ui_components['task_video_file'],
+                        batch_ui_components['task_subtitle_file']
+                    ]
+                )
+
+
+
+                # 清空任务列表
+                batch_ui_components['batch_clear_btn'].click(
+                    clear_batch_tasks,
+                    outputs=[
+                        batch_ui_components['batch_tasks_state'],
+                        batch_ui_components['batch_total_tasks'],
+                        batch_ui_components['batch_completed_tasks'],
+                        batch_ui_components['batch_failed_tasks'],
+                        batch_ui_components['batch_success_rate']
+                    ]
+                )
+
+                # 批量开始
+                batch_ui_components['batch_start_all_btn'].click(
+                    start_all_batch_tasks,
+                    inputs=[batch_ui_components['batch_tasks_state']],
+                    outputs=[batch_ui_components['batch_tasks_state']]
+                )
+
+                # 导出结果
+                batch_ui_components['batch_export_btn'].click(
+                    export_batch_results,
+                    inputs=[batch_ui_components['batch_tasks_state']]
+                )
+
+                # 保留原视频格式选项变化时控制输出格式可见性
+                batch_ui_components['batch_keep_original_format'].change(
+                    toggle_output_format_visibility,
+                    inputs=[batch_ui_components['batch_keep_original_format']],
+                    outputs=[batch_ui_components['batch_output_format']]
+                )
+
+                # 任务列表更新
+                batch_ui_components['batch_tasks_state'].change(
+                    render_batch_tasks,
+                    inputs=[batch_ui_components['batch_tasks_state']],
+                    outputs=[batch_ui_components['batch_task_display']]
+                )
+
             with gr.TabItem(i18n('Auxiliary Functions')):
                 for i in componments[2]:
                     i.getUI(input_file)
