@@ -12,6 +12,22 @@ from . import logger, i18n
 
 current_path = os.environ.get("current_path")
 
+def get_default_gpu_memory():
+    """获取GPU显存的3/4作为默认值"""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            total_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
+            default_memory = total_memory * 0.75  # 使用3/4显存
+            logger.info(f"检测到GPU显存: {total_memory:.1f}GB, 设置默认限制: {default_memory:.1f}GB")
+            return round(default_memory, 1)
+        else:
+            logger.info("未检测到CUDA设备，使用CPU模式默认值")
+            return 6.0  # CPU模式默认值
+    except Exception as e:
+        logger.warning(f"GPU显存检测失败: {e}, 使用保守默认值")
+        return 6.0  # 出错时的保守默认值
+
 # https://huggingface.co/datasets/freddyaboulton/gradio-theme-subdomains/resolve/main/subdomains.json
 gradio_hf_hub_themes = [
     "default",
@@ -77,6 +93,8 @@ class Settings:
         ms_key: str = "",
         ms_lang_option: str = "zh",
         ollama_url: str = "http://localhost:11434",
+        auto_quality_adjustment: bool = True,
+        max_gpu_memory_gb: float = None,
     ):
         self.language = language
         self.server_port = int(server_port)
@@ -105,6 +123,9 @@ class Settings:
         self.ms_key = ms_key
         self.ms_lang_option = ms_lang_option
         self.ollama_url = ollama_url
+        self.auto_quality_adjustment = auto_quality_adjustment
+        # 如果没有指定显存限制，则自动检测并设置为3/4显存
+        self.max_gpu_memory_gb = max_gpu_memory_gb if max_gpu_memory_gb is not None else get_default_gpu_memory()
         # detect python envs####
         if self.indextts_pydir != "":
             if os.path.isfile(self.indextts_pydir):
@@ -220,6 +241,20 @@ class Settings_UI:
             for i in item:
                 i.update_cfg(config=Sava_Utils.config)
 
+    def _get_gpu_info(self):
+        """获取GPU信息用于UI显示"""
+        try:
+            import torch
+            if torch.cuda.is_available():
+                total_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                gpu_name = torch.cuda.get_device_name(0)
+                recommended = total_memory * 0.75
+                return f"检测到: {gpu_name} ({total_memory:.1f}GB), 推荐: {recommended:.1f}GB"
+            else:
+                return "未检测到CUDA设备"
+        except Exception:
+            return "GPU信息获取失败"
+
     def save_settngs(self, *args):
         current_edit_rows = Sava_Utils.config.num_edit_rows
         Sava_Utils.config = Settings(*args)
@@ -265,6 +300,27 @@ class Settings_UI:
                 with gr.Row():
                     self.num_edit_rows = gr.Number(label=i18n('Edit Panel Row Count (Requires a restart)'), minimum=1, maximum=50, value=Sava_Utils.config.num_edit_rows)
                     self.export_spk_pattern = gr.Text(label=i18n('Export subtitles with speaker name. Fill in your template to enable.'), placeholder=r"{#NAME}: {#TEXT}", value=Sava_Utils.config.export_spk_pattern)
+
+            # 音频处理优化设置
+            with gr.Group():
+                gr.Markdown(value="🎵 音频处理优化")
+                with gr.Row():
+                    self.auto_quality_adjustment = gr.Checkbox(
+                        label="智能质量调整",
+                        value=Sava_Utils.config.auto_quality_adjustment,
+                        info="自动根据文件大小调整音频质量，优化大文件处理速度"
+                    )
+                    # 获取GPU信息用于显示
+                    gpu_info = self._get_gpu_info()
+                    self.max_gpu_memory_gb = gr.Number(
+                        label="GPU显存限制(GB)",
+                        value=Sava_Utils.config.max_gpu_memory_gb,
+                        minimum=2.0,
+                        maximum=24.0,
+                        step=0.5,
+                        info=f"限制GPU显存使用，避免大文件处理时内存溢出。{gpu_info}"
+                    )
+
             self.theme = gr.Dropdown(choices=gradio_hf_hub_themes, value=Sava_Utils.config.theme, label=i18n('Theme (Requires a restart)'), interactive=True, allow_custom_value=True)
         
         with gr.Accordion(i18n('Storage Management'),open=False):
@@ -331,6 +387,8 @@ class Settings_UI:
             self.gsv_dir_input,
             self.gsv_args,
             self.ollama_url,
+            self.auto_quality_adjustment,
+            self.max_gpu_memory_gb,
         ]
 
         self.save_settings_btn.click(self.save_settngs, inputs=componments_list, outputs=componments_list)

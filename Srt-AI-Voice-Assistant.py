@@ -252,7 +252,14 @@ def handle_video_file_load(video_file_upload, video_path_input, uploaded_files, 
         output_dir = os.path.join(base_temp_dir, "audio_processing", workspace_name)
         os.makedirs(output_dir, exist_ok=True)
 
-        result = audio_separator.separate_video_audio(video_path, output_dir)
+        # 使用配置中的显存和质量调整设置
+        result = audio_separator.separate_video_audio(
+            video_path,
+            output_dir,
+            audio_quality="high",  # 初始质量，会根据文件大小自动调整
+            max_memory_gb=Sava_Utils.config.max_gpu_memory_gb,
+            auto_quality=Sava_Utils.config.auto_quality_adjustment
+        )
 
         # 使用人声音频进行分割
         vocal_audio_path = result.get('vocal_audio')

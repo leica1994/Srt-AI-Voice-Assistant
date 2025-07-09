@@ -33,13 +33,45 @@ if torch.cuda.is_available():
 
 
 class DemucsWrapper:
-    """Demucs 分离器包装类"""
+    """Demucs 分离器包装类 - 优化显存使用"""
 
-    def __init__(self, model_name: str = "htdemucs"):
+    def __init__(self, model_name: str = "htdemucs", max_memory_gb: float = 8.0):
         self.model_name = model_name
         self.model = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.max_memory_gb = max_memory_gb
+        self.chunk_size = self._calculate_chunk_size()
         print(f"🤖 Initializing Demucs model: {model_name} on {self.device}")
+        print(f"💾 Memory limit: {max_memory_gb}GB, Chunk size: {self.chunk_size}s")
+
+    def _calculate_chunk_size(self):
+        """根据可用显存计算合适的音频块大小"""
+        if self.device == "cpu":
+            return 60  # CPU模式使用较大块
+
+        try:
+            # 获取GPU显存信息
+            total_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
+            available_memory = min(total_memory * 0.8, self.max_memory_gb)  # 使用80%显存或用户限制
+
+            # 根据可用显存计算块大小（经验公式）
+            if available_memory >= 12:
+                chunk_size = 60  # 12GB+: 60秒块
+            elif available_memory >= 8:
+                chunk_size = 45  # 8-12GB: 45秒块
+            elif available_memory >= 6:
+                chunk_size = 30  # 6-8GB: 30秒块
+            elif available_memory >= 4:
+                chunk_size = 20  # 4-6GB: 20秒块
+            else:
+                chunk_size = 15  # <4GB: 15秒块
+
+            print(f"🔍 GPU Memory: {total_memory:.1f}GB total, using {available_memory:.1f}GB")
+            return chunk_size
+
+        except Exception as e:
+            print(f"⚠️ Could not detect GPU memory: {e}, using conservative chunk size")
+            return 20  # 保守的块大小
 
     def _load_model(self):
         """加载 Demucs 模型"""
@@ -49,53 +81,35 @@ class DemucsWrapper:
                 self.model = get_model(self.model_name)
                 self.model.to(self.device)
                 self.model.eval()
+
+                # 设置模型为半精度以节省显存
+                if self.device == "cuda":
+                    self.model = self.model.half()
+
                 print("✅ Model loaded successfully")
             except Exception as e:
                 raise RuntimeError(f"Failed to load Demucs model: {e}")
 
     def separate_audio_file(self, audio_path: str):
-        """使用 Python API 分离音频文件"""
+        """使用 Python API 分离音频文件 - 优化显存使用"""
         self._load_model()
 
         print(f"🎵 Using Demucs Python API to separate audio...")
 
         try:
-            # 加载音频
-            waveform, sample_rate = torchaudio.load(audio_path)
+            # 加载音频信息
+            info = torchaudio.info(audio_path)
+            sample_rate = info.sample_rate
+            total_frames = info.num_frames
+            duration = total_frames / sample_rate
 
-            # 确保音频是立体声
-            if waveform.shape[0] == 1:
-                waveform = waveform.repeat(2, 1)
-            elif waveform.shape[0] > 2:
-                waveform = waveform[:2]
+            print(f"📊 Audio info: {duration:.1f}s, {sample_rate}Hz, {info.num_channels} channels")
 
-            # 移动到设备
-            waveform = waveform.to(self.device)
-
-            # 应用模型进行分离
-            with torch.no_grad():
-                sources = apply_model(self.model, waveform.unsqueeze(0),
-                                      device=self.device, progress=True)[0]
-
-            # 获取源名称
-            source_names = self.model.sources
-
-            # 保存分离的音频
-            outputs = {}
-            audio_name = Path(audio_path).stem
-
-            for i, source_name in enumerate(source_names):
-                # 移回 CPU 并转换
-                source_audio = sources[i].cpu()
-
-                # 创建临时文件
-                temp_file = Path(tempfile.gettempdir()) / f"demucs_{source_name}_{audio_name}.wav"
-
-                # 保存音频
-                torchaudio.save(str(temp_file), source_audio, sample_rate)
-                outputs[source_name] = str(temp_file)
-
-            return outputs
+            # 检查是否需要分块处理
+            if duration <= self.chunk_size:
+                return self._process_single_chunk(audio_path)
+            else:
+                return self._process_with_chunks(audio_path, sample_rate, total_frames)
 
         except Exception as e:
             raise RuntimeError(f"Demucs separation failed: {e}")
@@ -103,38 +117,272 @@ class DemucsWrapper:
             # 清理 GPU 内存
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+                gc.collect()
+
+    def _process_single_chunk(self, audio_path: str):
+        """处理单个音频块"""
+        print("🔄 Processing as single chunk...")
+
+        # 加载音频
+        waveform, sample_rate = torchaudio.load(audio_path)
+
+        # 确保音频是立体声
+        if waveform.shape[0] == 1:
+            waveform = waveform.repeat(2, 1)
+        elif waveform.shape[0] > 2:
+            waveform = waveform[:2]
+
+        # 转换为半精度以节省显存
+        if self.device == "cuda":
+            waveform = waveform.half()
+
+        # 移动到设备
+        waveform = waveform.to(self.device)
+
+        # 应用模型进行分离
+        with torch.no_grad():
+            sources = apply_model(self.model, waveform.unsqueeze(0),
+                                  device=self.device, progress=True)[0]
+
+        return self._save_sources(sources, sample_rate, Path(audio_path).stem)
+
+    def _process_with_chunks(self, audio_path: str, sample_rate: int, total_frames: int):
+        """分块处理大音频文件"""
+        chunk_frames = int(self.chunk_size * sample_rate)
+        overlap_frames = int(0.5 * sample_rate)  # 0.5秒重叠
+
+        num_chunks = (total_frames + chunk_frames - 1) // chunk_frames
+        print(f"🧩 Processing in {num_chunks} chunks of {self.chunk_size}s each...")
+
+        # 初始化输出容器
+        source_names = self.model.sources
+        accumulated_sources = {name: [] for name in source_names}
+
+        for chunk_idx in range(num_chunks):
+            start_frame = chunk_idx * chunk_frames
+            end_frame = min(start_frame + chunk_frames + overlap_frames, total_frames)
+
+            print(f"📦 Processing chunk {chunk_idx + 1}/{num_chunks} "
+                  f"({start_frame/sample_rate:.1f}s - {end_frame/sample_rate:.1f}s)")
+
+            try:
+                # 加载音频块
+                waveform, _ = torchaudio.load(
+                    audio_path,
+                    frame_offset=start_frame,
+                    num_frames=end_frame - start_frame
+                )
+
+                # 确保立体声
+                if waveform.shape[0] == 1:
+                    waveform = waveform.repeat(2, 1)
+                elif waveform.shape[0] > 2:
+                    waveform = waveform[:2]
+
+                # 转换为半精度
+                if self.device == "cuda":
+                    waveform = waveform.half()
+
+                waveform = waveform.to(self.device)
+
+                # 分离音频
+                with torch.no_grad():
+                    sources = apply_model(self.model, waveform.unsqueeze(0),
+                                          device=self.device, progress=False)[0]
+
+                # 处理重叠部分
+                if chunk_idx > 0:
+                    # 移除前半秒重叠
+                    fade_frames = int(0.25 * sample_rate)  # 0.25秒淡入淡出
+                    sources = sources[:, :, fade_frames:]
+
+                if chunk_idx < num_chunks - 1:
+                    # 移除后半秒重叠
+                    fade_frames = int(0.25 * sample_rate)
+                    sources = sources[:, :, :-fade_frames]
+
+                # 移到CPU并累积
+                for i, source_name in enumerate(source_names):
+                    source_chunk = sources[i].cpu().float()
+                    accumulated_sources[source_name].append(source_chunk)
+
+                # 清理当前块的GPU内存
+                del sources, waveform
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+            except Exception as e:
+                print(f"⚠️ Error processing chunk {chunk_idx + 1}: {e}")
+                continue
+
+        # 合并所有块
+        print("🔗 Merging chunks...")
+        final_sources = {}
+        for i, source_name in enumerate(source_names):
+            if accumulated_sources[source_name]:
+                merged = torch.cat(accumulated_sources[source_name], dim=1)
+                final_sources[source_name] = merged
+
+        return self._save_sources_dict(final_sources, sample_rate, Path(audio_path).stem)
+
+    def _save_sources(self, sources, sample_rate: int, audio_name: str):
+        """保存分离的音频源"""
+        outputs = {}
+        source_names = self.model.sources
+
+        for i, source_name in enumerate(source_names):
+            # 移回 CPU 并转换
+            source_audio = sources[i].cpu().float()
+
+            # 创建临时文件
+            temp_file = Path(tempfile.gettempdir()) / f"demucs_{source_name}_{audio_name}.wav"
+
+            # 保存音频
+            torchaudio.save(str(temp_file), source_audio, sample_rate)
+            outputs[source_name] = str(temp_file)
+
+        return outputs
+
+    def _save_sources_dict(self, sources_dict, sample_rate: int, audio_name: str):
+        """保存分离的音频源字典"""
+        outputs = {}
+
+        for source_name, source_audio in sources_dict.items():
+            # 创建临时文件
+            temp_file = Path(tempfile.gettempdir()) / f"demucs_{source_name}_{audio_name}.wav"
+
+            # 保存音频
+            torchaudio.save(str(temp_file), source_audio, sample_rate)
+            outputs[source_name] = str(temp_file)
+
+        return outputs
 
 
 class AudioSeparator:
     """音频分离器主类"""
 
     QUALITY_SETTINGS = {
-        'low': {'bitrate': '64k', 'samplerate': '22050'},
-        'medium': {'bitrate': '128k', 'samplerate': '44100'},
-        'high': {'bitrate': '256k', 'samplerate': '48000'}
+        'low': {'bitrate': '64k', 'samplerate': '22050', 'description': '低质量 - 快速处理'},
+        'medium': {'bitrate': '128k', 'samplerate': '44100', 'description': '中等质量 - 平衡'},
+        'high': {'bitrate': '256k', 'samplerate': '48000', 'description': '高质量 - 最佳效果'},
+        'ultra_low': {'bitrate': '32k', 'samplerate': '16000', 'description': '超低质量 - 超大文件专用'}
     }
 
-    def __init__(self, output_dir: str = "output", model_name: str = "htdemucs"):
+    def __init__(self, output_dir: str = "output", model_name: str = "htdemucs", max_memory_gb: float = 8.0, auto_quality: bool = True):
         self.output_dir = Path(output_dir)
         self.model_name = model_name
+        self.max_memory_gb = max_memory_gb
+        self.auto_quality = auto_quality
         self.separator = None
         self.temp_files = []
 
         # 创建输出目录
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
+    def _get_video_info(self, video_path: str) -> dict:
+        """获取视频文件信息"""
+        try:
+            probe = ffmpeg.probe(video_path)
+            video_info = next(s for s in probe['streams'] if s['codec_type'] == 'video')
+            audio_info = next((s for s in probe['streams'] if s['codec_type'] == 'audio'), None)
+
+            duration = float(probe['format']['duration'])
+            file_size = int(probe['format']['size']) / (1024 * 1024)  # MB
+
+            return {
+                'duration': duration,
+                'file_size_mb': file_size,
+                'video_codec': video_info.get('codec_name', 'unknown'),
+                'audio_codec': audio_info.get('codec_name', 'unknown') if audio_info else 'no_audio',
+                'width': int(video_info.get('width', 0)),
+                'height': int(video_info.get('height', 0))
+            }
+        except Exception as e:
+            print(f"⚠️ Could not get video info: {e}")
+            return {'duration': 0, 'file_size_mb': 0}
+
+    def _smart_quality_selection(self, video_path: str, requested_quality: str) -> str:
+        """智能质量选择 - 根据文件大小和时长自动调整"""
+        if not self.auto_quality:
+            return requested_quality
+
+        info = self._get_video_info(video_path)
+        duration_hours = info['duration'] / 3600
+        file_size_mb = info['file_size_mb']
+
+        print(f"📊 Video analysis: {duration_hours:.1f}h, {file_size_mb:.1f}MB")
+
+        # 智能质量选择规则
+        if duration_hours > 2.0 or file_size_mb > 2000:  # 超过2小时或2GB
+            recommended_quality = 'ultra_low'
+            reason = f"超大文件 ({duration_hours:.1f}h, {file_size_mb:.0f}MB)"
+        elif duration_hours > 1.0 or file_size_mb > 1000:  # 超过1小时或1GB
+            recommended_quality = 'low'
+            reason = f"大文件 ({duration_hours:.1f}h, {file_size_mb:.0f}MB)"
+        elif duration_hours > 0.5 or file_size_mb > 500:  # 超过30分钟或500MB
+            recommended_quality = 'medium'
+            reason = f"中等文件 ({duration_hours:.1f}h, {file_size_mb:.0f}MB)"
+        else:
+            recommended_quality = requested_quality  # 保持用户选择
+            reason = f"小文件 ({duration_hours:.1f}h, {file_size_mb:.0f}MB)"
+
+        # 如果推荐质量低于用户请求，给出提示
+        quality_levels = {'ultra_low': 0, 'low': 1, 'medium': 2, 'high': 3}
+        if quality_levels.get(recommended_quality, 2) < quality_levels.get(requested_quality, 2):
+            print(f"🎯 智能质量调整: {requested_quality} → {recommended_quality}")
+            print(f"   原因: {reason}")
+            print(f"   说明: {self.QUALITY_SETTINGS[recommended_quality]['description']}")
+            print(f"   💡 这将显著减少处理时间和显存使用")
+            return recommended_quality
+        else:
+            print(f"✅ 保持用户选择的质量: {requested_quality} ({reason})")
+            return requested_quality
+
+    def _estimate_processing_time(self, duration_hours: float, quality: str) -> str:
+        """估算处理时间"""
+        # 基于经验的处理时间估算（分钟）
+        base_time = {
+            'ultra_low': duration_hours * 5,   # 5分钟/小时
+            'low': duration_hours * 8,         # 8分钟/小时
+            'medium': duration_hours * 15,     # 15分钟/小时
+            'high': duration_hours * 25        # 25分钟/小时
+        }
+
+        estimated_minutes = base_time.get(quality, duration_hours * 15)
+
+        if estimated_minutes < 1:
+            return "< 1分钟"
+        elif estimated_minutes < 60:
+            return f"约 {estimated_minutes:.0f}分钟"
+        else:
+            hours = estimated_minutes / 60
+            return f"约 {hours:.1f}小时"
+
     def extract_audio_from_video(self, video_path: str, audio_path: str = None,
                                  audio_quality: str = "high") -> str:
-        """从视频中提取音频"""
+        """从视频中提取音频 - 支持智能质量调整"""
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video file not found: {video_path}")
+
+        # 智能质量选择
+        final_quality = self._smart_quality_selection(video_path, audio_quality)
 
         if audio_path is None:
             video_name = Path(video_path).stem
             audio_path = self.output_dir / f"{video_name}_raw.wav"
 
-        settings = self.QUALITY_SETTINGS[audio_quality]
-        print(f"🎬 Extracting audio: {audio_quality} quality")
+        settings = self.QUALITY_SETTINGS[final_quality]
+
+        # 获取视频信息用于时间估算
+        info = self._get_video_info(video_path)
+        duration_hours = info['duration'] / 3600
+        estimated_time = self._estimate_processing_time(duration_hours, final_quality)
+
+        print(f"🎬 提取音频: {final_quality} 质量 ({settings['description']})")
+        print(f"⏱️ 预计处理时间: {estimated_time}")
+
+        if final_quality != audio_quality:
+            print(f"🔄 质量已自动调整: {audio_quality} → {final_quality} (优化大文件处理)")
 
         try:
             stream = ffmpeg.input(str(video_path))
@@ -148,7 +396,8 @@ class AudioSeparator:
                 ac=2
             )
             ffmpeg.run(stream, overwrite_output=True, quiet=True)
-            print(f"✅ Audio extracted: {audio_path}")
+            print(f"✅ 音频提取完成: {audio_path}")
+            print(f"📊 输出参数: {settings['bitrate']} @ {settings['samplerate']}Hz")
             return str(audio_path)
 
         except Exception as e:
@@ -185,7 +434,7 @@ class AudioSeparator:
         """加载 Demucs 模型"""
         if self.separator is None:
             try:
-                self.separator = DemucsWrapper(self.model_name)
+                self.separator = DemucsWrapper(self.model_name, self.max_memory_gb)
             except Exception as e:
                 raise RuntimeError(f"Failed to load model: {e}")
 
@@ -414,20 +663,24 @@ def _timestamp_to_seconds(timestamp: datetime.datetime) -> float:
 
 
 def separate_video_audio(video_path: str, output_dir: str = "output",
-                         audio_quality: str = "high", model_name: str = "htdemucs") -> Dict[str, str]:
+                         audio_quality: str = "high", model_name: str = "htdemucs",
+                         max_memory_gb: float = 8.0, auto_quality: bool = True) -> Dict[str, str]:
     """
     从视频分离音频和人声轨道
-    
+
     Args:
         video_path: 视频文件路径
         output_dir: 输出目录
-        audio_quality: 音频质量
+        audio_quality: 音频质量 (会根据文件大小自动调整)
         model_name: Demucs 模型名称
-    
+        max_memory_gb: 最大显存使用限制(GB)
+        auto_quality: 是否启用智能质量调整
+
     Returns:
         Dict[str, str]: 包含所有输出文件路径的字典
     """
-    with AudioSeparator(output_dir=output_dir, model_name=model_name) as separator:
+    with AudioSeparator(output_dir=output_dir, model_name=model_name,
+                       max_memory_gb=max_memory_gb, auto_quality=auto_quality) as separator:
         return separator.process_video(video_path, audio_quality=audio_quality)
 
 
