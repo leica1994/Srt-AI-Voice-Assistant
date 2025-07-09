@@ -13,13 +13,27 @@ from . import logger, i18n
 current_path = os.environ.get("current_path")
 
 def get_default_gpu_memory():
-    """获取GPU显存的3/4作为默认值"""
+    """获取GPU显存的默认值 - 针对16GB显卡优化"""
     try:
         import torch
         if torch.cuda.is_available():
             total_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
-            default_memory = total_memory * 0.75  # 使用3/4显存
-            logger.info(f"检测到GPU显存: {total_memory:.1f}GB, 设置默认限制: {default_memory:.1f}GB")
+
+            # 针对不同显存大小的优化策略
+            if total_memory >= 15:  # 16GB显卡
+                # 16GB显卡使用更保守的70%，确保稳定性
+                default_memory = total_memory * 0.7
+                logger.info(f"检测到16GB显卡: {total_memory:.1f}GB, 使用保守70%限制: {default_memory:.1f}GB")
+            elif total_memory >= 11:  # 12GB显卡
+                default_memory = total_memory * 0.75  # 使用75%显存
+                logger.info(f"检测到12GB显卡: {total_memory:.1f}GB, 设置默认限制: {default_memory:.1f}GB")
+            elif total_memory >= 7:  # 8GB显卡
+                default_memory = total_memory * 0.8  # 使用80%显存
+                logger.info(f"检测到8GB显卡: {total_memory:.1f}GB, 设置默认限制: {default_memory:.1f}GB")
+            else:  # 小显存显卡
+                default_memory = total_memory * 0.85  # 使用85%显存
+                logger.info(f"检测到小显存显卡: {total_memory:.1f}GB, 设置默认限制: {default_memory:.1f}GB")
+
             return round(default_memory, 1)
         else:
             logger.info("未检测到CUDA设备，使用CPU模式默认值")
@@ -242,14 +256,28 @@ class Settings_UI:
                 i.update_cfg(config=Sava_Utils.config)
 
     def _get_gpu_info(self):
-        """获取GPU信息用于UI显示"""
+        """获取GPU信息用于UI显示 - 针对16GB显卡优化"""
         try:
             import torch
             if torch.cuda.is_available():
                 total_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
                 gpu_name = torch.cuda.get_device_name(0)
-                recommended = total_memory * 0.75
-                return f"检测到: {gpu_name} ({total_memory:.1f}GB), 推荐: {recommended:.1f}GB"
+
+                # 针对不同显存大小的推荐设置
+                if total_memory >= 15:  # 16GB显卡
+                    recommended = total_memory * 0.7
+                    optimization = "16GB显卡优化: 70%"
+                elif total_memory >= 11:  # 12GB显卡
+                    recommended = total_memory * 0.75
+                    optimization = "12GB显卡优化: 75%"
+                elif total_memory >= 7:  # 8GB显卡
+                    recommended = total_memory * 0.8
+                    optimization = "8GB显卡优化: 80%"
+                else:  # 小显存显卡
+                    recommended = total_memory * 0.85
+                    optimization = "小显存优化: 85%"
+
+                return f"检测到: {gpu_name} ({total_memory:.1f}GB), {optimization}, 推荐: {recommended:.1f}GB"
             else:
                 return "未检测到CUDA设备"
         except Exception:
