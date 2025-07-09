@@ -82,9 +82,8 @@ class DemucsWrapper:
                 self.model.to(self.device)
                 self.model.eval()
 
-                # 设置模型为半精度以节省显存
-                if self.device == "cuda":
-                    self.model = self.model.half()
+                # 暂时不使用半精度，避免类型错误
+                # TODO: 在解决类型兼容性问题后重新启用半精度优化
 
                 print("✅ Model loaded successfully")
             except Exception as e:
@@ -132,11 +131,7 @@ class DemucsWrapper:
         elif waveform.shape[0] > 2:
             waveform = waveform[:2]
 
-        # 转换为半精度以节省显存
-        if self.device == "cuda":
-            waveform = waveform.half()
-
-        # 移动到设备
+        # 移动到设备，避免半精度类型错误
         waveform = waveform.to(self.device)
 
         # 应用模型进行分离
@@ -179,13 +174,10 @@ class DemucsWrapper:
                 elif waveform.shape[0] > 2:
                     waveform = waveform[:2]
 
-                # 转换为半精度
-                if self.device == "cuda":
-                    waveform = waveform.half()
-
+                # 移动到设备，避免半精度类型错误
                 waveform = waveform.to(self.device)
 
-                # 分离音频
+                # 分离音频 - 不使用半精度避免类型错误
                 with torch.no_grad():
                     sources = apply_model(self.model, waveform.unsqueeze(0),
                                           device=self.device, progress=False)[0]
@@ -220,8 +212,18 @@ class DemucsWrapper:
         final_sources = {}
         for i, source_name in enumerate(source_names):
             if accumulated_sources[source_name]:
-                merged = torch.cat(accumulated_sources[source_name], dim=1)
-                final_sources[source_name] = merged
+                try:
+                    merged = torch.cat(accumulated_sources[source_name], dim=1)
+                    final_sources[source_name] = merged
+                    print(f"✅ Successfully merged {source_name}: {len(accumulated_sources[source_name])} chunks")
+                except Exception as e:
+                    print(f"⚠️ Failed to merge {source_name}: {e}")
+                    continue
+            else:
+                print(f"⚠️ No chunks found for {source_name}")
+
+        if not final_sources:
+            raise RuntimeError("No audio sources were successfully processed")
 
         return self._save_sources_dict(final_sources, sample_rate, Path(audio_path).stem)
 
