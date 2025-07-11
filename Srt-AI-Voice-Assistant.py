@@ -907,9 +907,6 @@ def toggle_output_format_visibility(keep_original_format):
     return gr.update(visible=not keep_original_format)
 
 
-
-
-
 def render_batch_tasks(tasks):
     """渲染批量任务列表 - 简洁实用版本"""
     if not tasks:
@@ -1577,7 +1574,8 @@ def save(args, proj: str = None, dir: str = None, subtitle: Subtitle = None):
         else:
             try:
                 data = json.loads(audio)
-                logger.error(f"{i18n('Failed subtitle id')}:{subtitle.index},{i18n('error message received')}:{str(data)}")
+                logger.error(
+                    f"{i18n('Failed subtitle id')}:{subtitle.index},{i18n('error message received')}:{str(data)}")
             except:
                 logger.error(f"{i18n('Failed subtitle id')}:{subtitle.index}, 无效的音频数据")
     else:
@@ -1725,9 +1723,9 @@ def remake(*args):
             # 构造与批量生成相同的参数格式
             formatted_args = [
                 None,  # input_file (单条生成时不需要)
-                30,    # fps (默认值)
-                0,     # offset (默认值)
-                1,     # workers (单条生成时使用1个worker)
+                30,  # fps (默认值)
+                0,  # offset (默认值)
+                1,  # workers (单条生成时使用1个worker)
                 *tts_args  # TTS项目的具体参数
             ]
 
@@ -1891,7 +1889,7 @@ if __name__ == "__main__":
                             )
 
                         gen_textbox_output_text = gr.Textbox(label=i18n('Output Info'), interactive=False)
-                        audio_output = gr.Audio(label="Output Audio")
+                        audio_output = gr.Audio(label="Output Audio", streaming=True)
                         stop_btn = gr.Button(value=i18n('Stop'), variant="stop")
                         stop_btn.click(lambda x: gr.Info(x.set()), inputs=[INTERRUPT_EVENT])
                         if not Sava_Utils.config.server_mode:
@@ -1905,20 +1903,12 @@ if __name__ == "__main__":
                         # 处理状态跟踪
                         processing_state = gr.State(value={"processed": False, "video_path": "", "srt_path": ""})
 
-
-
-
-
                         # 绑定视频文件加载事件
                         load_local_video_path_btn.click(
                             handle_video_file_load,
                             inputs=[video_file_upload, local_video_path_input, input_file, processing_state],
                             outputs=[gen_textbox_output_text, processing_state]
                         )
-
-
-
-
 
                         # 绑定合成视频事件（添加进度条支持）
                         compose_video_btn.click(
@@ -2170,8 +2160,6 @@ if __name__ == "__main__":
                         batch_ui_components['task_subtitle_file']
                     ]
                 )
-
-
 
                 # 清空任务列表
                 batch_ui_components['batch_clear_btn'].click(
