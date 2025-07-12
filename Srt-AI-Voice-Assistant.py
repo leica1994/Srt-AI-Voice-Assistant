@@ -1758,6 +1758,160 @@ def recompose(page: int, subtitle_list: Subtitles):
     return audio, "OK", *show_page(page, subtitle_list)
 
 
+# 流式音频生成器函数
+def streaming_generate_preprocess(interrupt_event, *args, project=None):
+    """流式音频生成预处理函数"""
+    try:
+        args, kwargs = Projet_dict[project].arg_filter(*args)
+    except Exception as e:
+        info = f"{i18n('An error occurred')}: {str(e)}"
+        gr.Warning(info)
+        return
+
+    # 使用生成器进行流式音频生成
+    for audio_chunk in streaming_generate(*args, interrupt_event=interrupt_event, **kwargs):
+        yield audio_chunk
+
+
+def streaming_generate(*args, interrupt_event: Sava_Utils.utils.Flag, proj="", in_files=[], fps=30, offset=0, max_workers=1):
+    """流式音频生成函数"""
+    import time
+    import tempfile
+    import soundfile as sf
+
+    # 首先执行原始的生成逻辑
+    result = generate(*args, interrupt_event=interrupt_event, proj=proj, in_files=in_files, fps=fps, offset=offset, max_workers=max_workers)
+
+    # 如果生成成功，保存为临时文件并输出路径
+    if result and len(result) > 0 and result[0] is not None:
+        try:
+            sr_audio = result[0]  # (sample_rate, audio_data)
+            if sr_audio is not None and len(sr_audio) == 2:
+                sample_rate, audio_data = sr_audio
+
+                # 创建临时文件
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                    sf.write(tmp_file.name, audio_data, sample_rate)
+                    yield tmp_file.name
+
+        except Exception as e:
+            print(f"流式音频输出错误: {e}")
+            # 如果流式输出失败，尝试输出静音音频
+            try:
+                sample_rate = 22050
+                duration = 1.0
+                silence = np.zeros(int(sample_rate * duration))
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                    sf.write(tmp_file.name, silence, sample_rate)
+                    yield tmp_file.name
+            except:
+                pass
+    else:
+        # 如果生成失败，输出一个静音音频以避免界面错误
+        try:
+            sample_rate = 22050
+            duration = 1.0
+            silence = np.zeros(int(sample_rate * duration))
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                sf.write(tmp_file.name, silence, sample_rate)
+                yield tmp_file.name
+        except Exception as e:
+            print(f"生成静音音频错误: {e}")
+
+
+def streaming_recompose(page: int, subtitle_list: Subtitles):
+    """流式重组音频函数"""
+    import time
+    import tempfile
+    import soundfile as sf
+
+    if subtitle_list is None or len(subtitle_list) == 0:
+        gr.Info(i18n('There is no subtitle in the current workspace'))
+        return
+
+    try:
+        # 直接调用原始的 recompose 函数获取结果
+        result = recompose(page, subtitle_list)
+
+        if result and len(result) > 0 and result[0] is not None:
+            audio = result[0]  # (sample_rate, audio_data)
+            if audio is not None and len(audio) == 2:
+                sample_rate, audio_data = audio
+
+                # 创建临时文件
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                    sf.write(tmp_file.name, audio_data, sample_rate)
+                    yield tmp_file.name
+
+        gr.Info(i18n("Reassemble successfully!"))
+    except Exception as e:
+        gr.Warning(f"流式重组音频失败: {e}")
+        # 输出静音以避免界面错误
+        try:
+            sample_rate = 22050
+            duration = 1.0
+            silence = np.zeros(int(sample_rate * duration))
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                sf.write(tmp_file.name, silence, sample_rate)
+                yield tmp_file.name
+        except:
+            pass
+
+
+def streaming_gen_multispeaker(interrupt_event: Sava_Utils.utils.Flag, *args, remake=False):
+    """流式多说话人生成函数"""
+    import time
+    import tempfile
+    import soundfile as sf
+
+    page = args[0]
+    max_workers = int(args[1])
+    subtitles: Subtitles = args[-1]
+
+    if subtitles is None or len(subtitles) == 0:
+        gr.Info(i18n('There is no subtitle in the current workspace'))
+        return
+
+    # 执行原始的多说话人生成逻辑
+    result = gen_multispeaker(interrupt_event, *args, remake=remake)
+
+    # 如果生成成功，保存为临时文件并输出路径
+    if result and len(result) > 0 and result[-1] is not None:
+        try:
+            sr_audio = result[-1]
+            if sr_audio is not None and len(sr_audio) == 2:
+                sample_rate, audio_data = sr_audio
+
+                # 创建临时文件
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                    sf.write(tmp_file.name, audio_data, sample_rate)
+                    yield tmp_file.name
+
+        except Exception as e:
+            print(f"流式多说话人音频生成错误: {e}")
+    else:
+        # 如果没有音频返回，尝试重组现有音频
+        try:
+            audio = subtitles.audio_join(sr=Sava_Utils.config.output_sr)
+            if audio is not None:
+                # 创建临时文件
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                    sf.write(tmp_file.name, audio[1], audio[0])
+                    yield tmp_file.name
+        except Exception as e:
+            print(f"流式多说话人音频重组错误: {e}")
+            # 输出静音以避免界面错误
+            try:
+                sample_rate = 22050
+                duration = 1.0
+                silence = np.zeros(int(sample_rate * duration))
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                    sf.write(tmp_file.name, silence, sample_rate)
+                    yield tmp_file.name
+            except:
+                pass
+
+
 def save_spk(name: str, *args, project: str):
     name = name.strip()
     if Sava_Utils.config.server_mode:
@@ -1889,7 +2043,15 @@ if __name__ == "__main__":
                             )
 
                         gen_textbox_output_text = gr.Textbox(label=i18n('Output Info'), interactive=False)
-                        audio_output = gr.Audio(label="Output Audio", streaming=True)
+                        audio_output = gr.Audio(
+                            label="Output Audio",
+                            streaming=True,
+                            autoplay=False,
+                            interactive=False,
+                            show_download_button=True,
+                            show_share_button=False,
+                            type="filepath"
+                        )
                         stop_btn = gr.Button(value=i18n('Stop'), variant="stop")
                         stop_btn.click(lambda x: gr.Info(x.set()), inputs=[INTERRUPT_EVENT])
                         if not Sava_Utils.config.server_mode:
@@ -2059,8 +2221,8 @@ if __name__ == "__main__":
 
                         page_slider.change(show_page, inputs=[page_slider, STATE], outputs=edit_rows)
                         workloadbtn.click(load_work, inputs=[worklist], outputs=[STATE, page_slider, *edit_rows])
-                        recompose_btn.click(recompose, inputs=[page_slider, STATE],
-                                            outputs=[audio_output, gen_textbox_output_text, *edit_rows])
+                        recompose_btn.click(streaming_recompose, inputs=[page_slider, STATE],
+                                            outputs=[audio_output])
 
                         apply_spkmap2workspace_btn.click(apply_spkmap2workspace,
                                                          inputs=[speaker_map_dict, page_slider, STATE],
@@ -2125,8 +2287,8 @@ if __name__ == "__main__":
                         start_gen_multispeaker_btn = gr.Button(value=i18n('Start Multi-speaker Synthesizing'),
                                                                variant="primary")
                         start_gen_multispeaker_btn.click(
-                            lambda process=gr.Progress(track_tqdm=True), *args: gen_multispeaker(*args),
-                            inputs=[INTERRUPT_EVENT, page_slider, workers, STATE], outputs=edit_rows + [audio_output])
+                            lambda process=gr.Progress(track_tqdm=True), *args: streaming_gen_multispeaker(*args),
+                            inputs=[INTERRUPT_EVENT, page_slider, workers, STATE], outputs=[audio_output])
 
             with gr.TabItem("批量配音"):
                 batch_ui_components = create_batch_dubbing_ui()
@@ -2236,21 +2398,21 @@ if __name__ == "__main__":
                                       outputs=[worklist, page_slider, *edit_rows, STATE])
 
         GSV.gen_btn2.click(
-            lambda process=gr.Progress(track_tqdm=True), *args: generate_preprocess(*args, project="gsv"),
+            lambda process=gr.Progress(track_tqdm=True), *args: streaming_generate_preprocess(*args, project="gsv"),
             inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *GSV_ARGS],
-            outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
+            outputs=[audio_output])
         EDGETTS.gen_btn_edge.click(
-            lambda process=gr.Progress(track_tqdm=True), *args: generate_preprocess(*args, project="edgetts"),
+            lambda process=gr.Progress(track_tqdm=True), *args: streaming_generate_preprocess(*args, project="edgetts"),
             inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *EDGETTS_ARGS],
-            outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
+            outputs=[audio_output])
         INDEXTTS.gen_btn5.click(
-            lambda process=gr.Progress(track_tqdm=True), *args: generate_preprocess(*args, project="indextts"),
+            lambda process=gr.Progress(track_tqdm=True), *args: streaming_generate_preprocess(*args, project="indextts"),
             inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, *INDEXTTS_ARGS],
-            outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
+            outputs=[audio_output])
         CUSTOM.gen_btn4.click(
-            lambda process=gr.Progress(track_tqdm=True), *args: generate_preprocess(*args, project="custom"),
+            lambda process=gr.Progress(track_tqdm=True), *args: streaming_generate_preprocess(*args, project="custom"),
             inputs=[INTERRUPT_EVENT, input_file, fps, offset, workers, CUSTOM.choose_custom_api],
-            outputs=[audio_output, gen_textbox_output_text, worklist, page_slider, *edit_rows, STATE])
+            outputs=[audio_output])
         # Stability is not ensured due to the mechanism of gradio.
 
         # 添加Index-TTS配置刷新事件
