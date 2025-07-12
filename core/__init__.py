@@ -33,7 +33,7 @@ except ImportError:
 
 from .i18nAuto import I18n
 
-config_path = os.path.join(current_path, "SAVAdata", "config.json")
+config_path = os.path.join(current_path, "outputs", "config.json")
 try:
     if os.path.isfile(config_path):
         x = json.load(open(config_path, encoding="utf-8"))

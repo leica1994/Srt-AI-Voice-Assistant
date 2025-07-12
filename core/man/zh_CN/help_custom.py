@@ -3,7 +3,7 @@ help_custom = r"""
 ### 运行前请务必检查代码内容，运行不受信任的代码可能会导致电脑受到攻击！  
 ### 作者不对此产生的后果负任何责任！！
 
-### 将装有python函数的代码文件放在`SAVAdata/presets`下即可被调用  
+### 将装有python函数的代码文件放在`outputs/presets`下即可被调用
 ```
 def custom_api(text):#return: audio content
     from gradio_client import Client

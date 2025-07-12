@@ -31,7 +31,7 @@ class Custom(TTSProjet):
     def before_gen_action(self, custom_api_path, temp_namesp, **kwargs):
         # print(args)
         logger.info(f"Exec: custom_api_path {custom_api_path}")
-        with open(os.path.join(current_path, "SAVAdata", "presets", custom_api_path), "r", encoding="utf-8") as f:
+        with open(os.path.join(current_path, "outputs", "presets", custom_api_path), "r", encoding="utf-8") as f:
             code = f.read()
         exec(code, temp_namesp)
 
@@ -41,7 +41,7 @@ class Custom(TTSProjet):
     def refresh_custom_api_list(self):
         self.custom_api_list = ['None']
         try:
-            preset_dir = os.path.join(current_path, "SAVAdata", "presets")
+            preset_dir = os.path.join(current_path, "outputs", "presets")
             if os.path.isdir(preset_dir):
                 self.custom_api_list += [i for i in os.listdir(preset_dir) if i.endswith(".py")]
             else:

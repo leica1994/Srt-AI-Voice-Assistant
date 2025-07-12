@@ -57,7 +57,7 @@ Projet_dict = {"gsv": GSV, "edgetts": EDGETTS, "indextts": INDEXTTS, "custom": C
 def check_cache_file(video_path, subtitle_file, workspace_name):
     """检查是否存在有效的缓存文件"""
     try:
-        cache_dir = os.path.join(current_path, "SAVAdata", "temp", "audio_processing", workspace_name)
+        cache_dir = os.path.join(current_path, "outputs", "temp", "audio_processing", workspace_name)
         cache_file = os.path.join(cache_dir, "processing_cache.json")
 
         if not os.path.exists(cache_file):
@@ -218,8 +218,8 @@ def handle_video_file_load(video_file_upload, video_path_input, uploaded_files, 
 • ✂️ 音频片段: **{segments_count} 个片段**
 
 📂 **存储位置**
-• 🎬 项目目录: `SAVAdata/temp/audio_processing/{workspace_name}/`
-• ✂️ 音频片段: `SAVAdata/temp/audio_processing/{workspace_name}/segments/`
+• 🎬 项目目录: `outputs/temp/audio_processing/{workspace_name}/`
+• ✂️ 音频片段: `outputs/temp/audio_processing/{workspace_name}/segments/`
 
 🏷️ **项目名称**: `{workspace_name}`
 
@@ -248,7 +248,7 @@ def handle_video_file_load(video_file_upload, video_path_input, uploaded_files, 
         # workspace_name 已在缓存检查部分生成，这里直接使用
 
         # 使用项目标准的存储路径，包含workspace名称子目录
-        base_temp_dir = os.path.join(current_path, "SAVAdata", "temp")
+        base_temp_dir = os.path.join(current_path, "outputs", "temp")
         output_dir = os.path.join(base_temp_dir, "audio_processing", workspace_name)
         os.makedirs(output_dir, exist_ok=True)
 
@@ -333,8 +333,8 @@ def handle_video_file_load(video_file_upload, video_path_input, uploaded_files, 
 • ✂️ 音频片段: **{len(segments)} 个片段**
 
 📂 **存储位置**
-• 🎬 项目目录: `SAVAdata/temp/audio_processing/{workspace_name}/`
-• ✂️ 音频片段: `SAVAdata/temp/audio_processing/{workspace_name}/segments/`
+• 🎬 项目目录: `outputs/temp/audio_processing/{workspace_name}/`
+• ✂️ 音频片段: `outputs/temp/audio_processing/{workspace_name}/segments/`
 
 🏷️ **项目名称**: `{workspace_name}`
 
@@ -443,7 +443,7 @@ def handle_compose_video(progress, video_file_upload, video_path_input, subtitle
         # 步骤1: 导出字幕文件
         # 创建临时目录用于视频处理（添加workspace名称层级）
         project_name = subtitles_state.dir if subtitles_state.dir else "video_compose"
-        temp_dir = os.path.join(current_path, "SAVAdata", "temp", "video_compose", project_name)
+        temp_dir = os.path.join(current_path, "outputs", "temp", "video_compose", project_name)
         os.makedirs(temp_dir, exist_ok=True)
 
         # 检查是否已经有音频生成的哈希目录
@@ -566,7 +566,7 @@ def handle_compose_video(progress, video_file_upload, video_path_input, subtitle
 
         # 如果还是找不到，尝试在旧的输出目录中查找
         if not os.path.exists(audio_file_path):
-            fallback_audio_path = os.path.join(current_path, "SAVAdata", "output", f"{project_name}.wav")
+            fallback_audio_path = os.path.join(current_path, "outputs", "output", f"{project_name}.wav")
             if os.path.exists(fallback_audio_path):
                 audio_file_path = fallback_audio_path
             else:
@@ -720,7 +720,7 @@ def create_batch_dubbing_ui():
             with gr.Accordion(label="输出设置", open=False):
                 batch_output_dir = gr.Textbox(
                     label="输出目录",
-                    value="SAVAdata/output/batch_dubbing",
+                    value="outputs/output/batch_dubbing",
                     placeholder="输出文件保存目录",
                     interactive=True
                 )
@@ -1093,7 +1093,7 @@ def export_batch_results(tasks):
         report += "-" * 30 + "\n"
 
     # 保存报告文件
-    report_path = os.path.join(current_path, "SAVAdata", "output", "batch_report.txt")
+    report_path = os.path.join(current_path, "outputs", "output", "batch_report.txt")
     os.makedirs(os.path.dirname(report_path), exist_ok=True)
 
     with open(report_path, 'w', encoding='utf-8') as f:
@@ -1140,7 +1140,7 @@ def get_output_dir_with_workspace_name(workspace_name=None, fallback_name="defau
         fallback_name: 当workspace_name为空时的备用名称
 
     Returns:
-        str: SAVAdata/output/workspace_name 格式的目录路径
+        str: outputs/output/workspace_name 格式的目录路径
     """
     # 确定目录名称
     if workspace_name:
@@ -1152,7 +1152,7 @@ def get_output_dir_with_workspace_name(workspace_name=None, fallback_name="defau
         dir_name = f"{fallback_name}_{timestamp}"
 
     # 返回完整的输出目录路径
-    output_dir = os.path.join(current_path, "SAVAdata", "output", dir_name)
+    output_dir = os.path.join(current_path, "outputs", "output", dir_name)
 
     # 确保目录存在
     os.makedirs(output_dir, exist_ok=True)
@@ -1203,7 +1203,7 @@ def export_subtitle_with_new_name(file_list, subtitle_state):
                 workspace_dir_name = workspace_dir_name[:-1]
 
             # 如果原文件在output目录外，则使用基于workspace名称的output目录
-            if "SAVAdata" not in original_dir or "output" not in original_dir:
+            if "outputs" not in original_dir or "output" not in original_dir:
                 # 生成基于workspace名称的输出目录
                 workspace_output_dir = get_output_dir_with_workspace_name(workspace_dir_name, "subtitle")
                 # 指定导出路径，避免重复生成目录
@@ -1382,7 +1382,7 @@ def generate(*args, interrupt_event: core.utils.Flag, proj="", in_files=[], fps=
         gr.Warning(i18n('The current mode does not allow batch processing!'))
         return (None, i18n('The current mode does not allow batch processing!'), getworklist(), *load_page(Subtitles()),
                 Subtitles())
-    os.makedirs(os.path.join(current_path, "SAVAdata", "output"), exist_ok=True)
+    os.makedirs(os.path.join(current_path, "outputs", "output"), exist_ok=True)
     for in_file in in_files:
         try:
             subtitle_list = read_file(in_file.name, fps, offset)
@@ -1525,7 +1525,7 @@ def gen_multispeaker(interrupt_event: core.utils.Flag, *args,
             spk = key
         if spk is not None:
             try:
-                with open(os.path.join(current_path, "SAVAdata", "speakers", spk), 'rb') as f:
+                with open(os.path.join(current_path, "outputs", "speakers", spk), 'rb') as f:
                     info = pickle.load(f)
             except FileNotFoundError:
                 ok = False
@@ -1716,7 +1716,7 @@ def remake(*args):
         if spk is None:
             spk = subtitle_list.default_speaker
         try:
-            with open(os.path.join(current_path, "SAVAdata", "speakers", spk), 'rb') as f:
+            with open(os.path.join(current_path, "outputs", "speakers", spk), 'rb') as f:
                 info = pickle.load(f)
         except FileNotFoundError:
             logger.error(f"{i18n('Speaker archive not found')}: {spk}")
@@ -1846,7 +1846,7 @@ def streaming_generate(*args, interrupt_event: core.utils.Flag, proj="", in_file
         gr.Warning(i18n('The current mode does not allow batch processing!'))
         return
 
-    os.makedirs(os.path.join(current_path, "SAVAdata", "output"), exist_ok=True)
+    os.makedirs(os.path.join(current_path, "outputs", "output"), exist_ok=True)
 
     for in_file in in_files:
         try:
@@ -2021,8 +2021,8 @@ def save_spk(name: str, *args, project: str):
     # process raw data before generating
     try:
         Projet_dict[project].arg_filter(*args)
-        os.makedirs(os.path.join(current_path, "SAVAdata", "speakers"), exist_ok=True)
-        with open(os.path.join(current_path, "SAVAdata", "speakers", name), "wb") as f:
+        os.makedirs(os.path.join(current_path, "outputs", "speakers"), exist_ok=True)
+        with open(os.path.join(current_path, "outputs", "speakers", name), "wb") as f:
             pickle.dump({"project": project, "raw_data": args}, f)
         gr.Info(f"{i18n('Saved successfully')}: [{project}]{name}")
     except Exception as e:
@@ -2032,7 +2032,7 @@ def save_spk(name: str, *args, project: str):
 
 
 if __name__ == "__main__":
-    os.environ['GRADIO_TEMP_DIR'] = os.path.join(current_path, "SAVAdata", "temp", "gradio")
+    os.environ['GRADIO_TEMP_DIR'] = os.path.join(current_path, "outputs", "temp", "gradio")
     workspaces_list = refworklist()
     if args.server_port is None:
         server_port = core.config.server_port

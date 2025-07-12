@@ -185,8 +185,8 @@ class Settings:
 
     def save(self):
         dic = self.to_dict()
-        os.makedirs(os.path.join(current_path, "SAVAdata"), exist_ok=True)
-        with open(os.path.join(current_path, "SAVAdata", "config.json"), "w", encoding="utf-8") as f:
+        os.makedirs(os.path.join(current_path, "outputs"), exist_ok=True)
+        with open(os.path.join(current_path, "outputs", "config.json"), "w", encoding="utf-8") as f:
             json.dump(dic, f, indent=2, ensure_ascii=False)
 
     @classmethod
@@ -195,7 +195,7 @@ class Settings:
 
 
 def load_cfg():
-    config_path = os.path.join(current_path, "SAVAdata", "config.json")
+    config_path = os.path.join(current_path, "outputs", "config.json")
     if os.path.exists(config_path):
         try:
             config = Settings.from_dict(json.load(open(config_path, encoding="utf-8")))
@@ -209,7 +209,7 @@ def load_cfg():
 
 def rm_workspace(name):
     try:
-        shutil.rmtree(os.path.join(current_path, "SAVAdata", "workspaces", name))
+        shutil.rmtree(os.path.join(current_path, "outputs", "workspaces", name))
         gr.Info(f"{name} {i18n('was removed successfully.')}")
         time.sleep(0.1)
         return gr.update(visible=False), gr.update(visible=False)

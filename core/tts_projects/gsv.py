@@ -49,8 +49,8 @@ except:
 def temp_ra(a: tuple):
     sr, wav = a
     name = hashlib.md5(wav.tobytes()).hexdigest() + ".wav"
-    os.makedirs(os.path.join(current_path, "SAVAdata", "temp"), exist_ok=True)
-    dir = os.path.join(current_path, "SAVAdata", "temp", name)
+    os.makedirs(os.path.join(current_path, "outputs", "temp"), exist_ok=True)
+    dir = os.path.join(current_path, "outputs", "temp", name)
     if not os.path.exists(dir):
         sf.write(dir, wav, sr)
     return dir
@@ -58,8 +58,8 @@ def temp_ra(a: tuple):
 
 def temp_aux_ra(a: bytes):
     name = hashlib.md5(a).hexdigest() + ".wav"
-    os.makedirs(os.path.join(current_path, "SAVAdata", "temp"), exist_ok=True)
-    dir = os.path.join(current_path, "SAVAdata", "temp", name)
+    os.makedirs(os.path.join(current_path, "outputs", "temp"), exist_ok=True)
+    dir = os.path.join(current_path, "outputs", "temp", name)
     if not os.path.exists(dir):
         with open(dir, 'wb') as f:
             f.write(a)
@@ -307,10 +307,10 @@ class GSV(TTSProjet):
 
     def load_preset(self, name):
         try:
-            if name in ['None', None, "", []] or not os.path.exists(os.path.join(current_path, "SAVAdata", "presets", name)):
+            if name in ['None', None, "", []] or not os.path.exists(os.path.join(current_path, "outputs", "presets", name)):
                 return gr.update(), gr.update(label="", value="", placeholder=i18n('(Optional) Description'), interactive=True), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
-            dir = os.path.join(current_path, "SAVAdata", "presets", name)
+            dir = os.path.join(current_path, "outputs", "presets", name)
             preset = ARPreset.from_dict(json.load(open(os.path.join(dir, "info.json"), encoding="utf-8")))
 
             if preset.AR_TTS_Project_name == 'GPT_SoVITS' and preset.sovits_path != "" and preset.gpt_path != "":
@@ -407,7 +407,7 @@ class GSV(TTSProjet):
             if self.server_mode:
                 raise RuntimeError(i18n('This function has been disabled!'))
             if name not in ['', None, "None"]:
-                shutil.rmtree(os.path.join(current_path, "SAVAdata", "presets", name))
+                shutil.rmtree(os.path.join(current_path, "outputs", "presets", name))
                 gr.Info(f"{i18n('Successfully deleted')}:{name}")
             else:
                 gr.Info(i18n('Please select a valid preset!'))
@@ -418,7 +418,7 @@ class GSV(TTSProjet):
     def refresh_presets_list(self, reset=True):
         self.presets_list = ['None']
         try:
-            preset_dir = os.path.join(current_path, "SAVAdata", "presets")
+            preset_dir = os.path.join(current_path, "outputs", "presets")
             if os.path.isdir(preset_dir):
                 self.presets_list += [i for i in os.listdir(preset_dir) if os.path.isdir(os.path.join(preset_dir, i))]
             else:
@@ -458,7 +458,7 @@ class ARPreset:
         return self.__dict__
 
     def save(self):
-        dir = os.path.join(current_path, "SAVAdata", "presets", self.name)
+        dir = os.path.join(current_path, "outputs", "presets", self.name)
         os.makedirs(dir, exist_ok=True)
         if self.reference_audio_path is not None:
             sr, wav = self.reference_audio_path
@@ -478,16 +478,16 @@ class ARPreset:
                     continue
         self.auxiliary_audios = aux_list
         dic = self.to_dict()
-        with open(os.path.join(current_path, "SAVAdata", "presets", self.name, "info.json"), "w", encoding="utf-8") as f:
+        with open(os.path.join(current_path, "outputs", "presets", self.name, "info.json"), "w", encoding="utf-8") as f:
             json.dump(dic, f, indent=2, ensure_ascii=False)
 
     @classmethod
     def from_dict(cls, dict):
         x = cls(**dict)
-        if x.reference_audio_path and os.path.exists(os.path.join(current_path, "SAVAdata", "presets", x.name, "reference_audio.wav")):
-            x.reference_audio_path = os.path.join(current_path, "SAVAdata", "presets", x.name, "reference_audio.wav")
+        if x.reference_audio_path and os.path.exists(os.path.join(current_path, "outputs", "presets", x.name, "reference_audio.wav")):
+            x.reference_audio_path = os.path.join(current_path, "outputs", "presets", x.name, "reference_audio.wav")
         if x.auxiliary_audios not in [None, []]:
-            aux_audio = [os.path.join(current_path, "SAVAdata", "presets", x.name, i) for i in x.auxiliary_audios if os.path.exists(os.path.join(current_path, "SAVAdata", "presets", x.name, i))]
+            aux_audio = [os.path.join(current_path, "outputs", "presets", x.name, i) for i in x.auxiliary_audios if os.path.exists(os.path.join(current_path, "outputs", "presets", x.name, i))]
             if len(aux_audio) != len(x.auxiliary_audios):
                 gr.Warning(i18n('Partial auxiliary reference audio is missing!'))
             x.auxiliary_audios = aux_audio

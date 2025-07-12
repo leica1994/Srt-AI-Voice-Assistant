@@ -111,7 +111,7 @@ def refresh_config_on_app_load(indextts_instance):
 class IndexTTS(TTSProjet):
     def __init__(self, config):
         super().__init__("indextts", config)
-        self.config_file = os.path.join(current_path, "SAVAdata", "indextts_config.json")
+        self.config_file = os.path.join(current_path, "outputs", "indextts_config.json")
         self._ensure_config_dir()
 
     def _ensure_config_dir(self):
@@ -265,8 +265,8 @@ class IndexTTS(TTSProjet):
             current_path = os.environ.get("current_path", ".")
             segments_dir = None
 
-            # 查找segments目录（新结构: SAVAdata/temp/audio_processing/{workspace_name}/segments）
-            audio_processing_base = os.path.join(current_path, "SAVAdata", "temp", "audio_processing")
+            # 查找segments目录（新结构: outputs/temp/audio_processing/{workspace_name}/segments）
+            audio_processing_base = os.path.join(current_path, "outputs", "temp", "audio_processing")
             if os.path.exists(audio_processing_base):
                 for workspace_dir in os.listdir(audio_processing_base):
                     workspace_dir_path = os.path.join(audio_processing_base, workspace_dir)
@@ -538,8 +538,8 @@ class IndexTTS(TTSProjet):
         try:
             current_path = os.environ.get("current_path", ".")
 
-            # 新的目录结构是: SAVAdata/temp/audio_processing/{workspace_name}/segments
-            audio_processing_base = os.path.join(current_path, "SAVAdata", "temp", "audio_processing")
+            # 新的目录结构是: outputs/temp/audio_processing/{workspace_name}/segments
+            audio_processing_base = os.path.join(current_path, "outputs", "temp", "audio_processing")
 
             if not os.path.exists(audio_processing_base):
                 return False

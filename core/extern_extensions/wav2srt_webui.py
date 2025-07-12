@@ -8,7 +8,7 @@ import platform
 if platform.system() != "Windows":
     import shlex
 current_path = os.environ.get("current_path")
-OUT_DIR_DEFAULT = os.path.join(current_path, "SAVAdata", "output")
+OUT_DIR_DEFAULT = os.path.join(current_path, "outputs", "output")
 
 
 def flatten(lst):
@@ -41,7 +41,7 @@ class WAV2SRT(Base_Componment):
                     self.wav2srt_pid = gr.State(value=-1)
                     with gr.Column():
                         self.wav2srt_input = gr.File(label=i18n('Upload File'), file_count="multiple", interactive=True)
-                        self.wav2srt_out_dir = gr.Textbox(value="Default", label=i18n('Save Path(Folder Path), Default: SAVAdata\\output'), visible=not self.server_mode, interactive=not self.server_mode)
+                        self.wav2srt_out_dir = gr.Textbox(value="Default", label=i18n('Save Path(Folder Path), Default: outputs\\output'), visible=not self.server_mode, interactive=not self.server_mode)
                         self.wav2srt_pydir = gr.Textbox(value='Auto', label=i18n('Python Interpreter Path, align with GSV by default'), visible=not self.server_mode, interactive=not self.server_mode)
                         self.wav2srt_uvr_models = gr.Dropdown(
                             value='None',

@@ -93,7 +93,7 @@ def play_audio(idx, subtitle_list:Subtitles):
 def refworklist():
     try:
         assert not core.config.server_mode
-        return os.listdir(os.path.join(current_path, "SAVAdata", "workspaces"))
+        return os.listdir(os.path.join(current_path, "outputs", "workspaces"))
     except:
         return []
 
@@ -110,7 +110,7 @@ def getworklist(value=None):
 
 def refspklist():
     try:
-        return ["None", *os.listdir(os.path.join(current_path, "SAVAdata", "speakers"))]
+        return ["None", *os.listdir(os.path.join(current_path, "outputs", "speakers"))]
     except:
         return ["None"]
 
@@ -124,7 +124,7 @@ def load_work(dirname):
     try:
         if dirname in ["", [], None]:
             raise Exception(i18n('Must not be empty!'))
-        with open(os.path.join(current_path, "SAVAdata", "workspaces", dirname, "st.pkl"), 'rb') as f:
+        with open(os.path.join(current_path, "outputs", "workspaces", dirname, "st.pkl"), 'rb') as f:
             subtitles = pickle.load(f)
             subtitles.dir = dirname
         return subtitles, *load_page(subtitles)
@@ -250,7 +250,7 @@ def del_spk(name):
         if core.config.server_mode:
             raise RuntimeError(i18n('This function has been disabled!'))
         assert name not in ["", "None", [], None], i18n('Must not be empty!')
-        os.remove(os.path.join(current_path, "SAVAdata", "speakers", name))
+        os.remove(os.path.join(current_path, "outputs", "speakers", name))
         gr.Info(f"{i18n('Delete')}:{name}")
     except Exception as e:
         gr.Warning(f"Error: {str(e)}")

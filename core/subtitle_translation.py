@@ -140,7 +140,7 @@ class Translation_module(Base_Componment):
                     self.translation_target_language = gr.Dropdown(label=i18n('Specify Target Language'), choices=LANGUAGE, value=LANGUAGE[1], interactive=True)
                     self.batch_size = gr.Number(label="Batch Size", value=5, minimum=1, interactive=True)
                     self.merge_sub = gr.Checkbox(label=i18n('Generate merged subtitles'), value=False, interactive=True)
-                    self.output_dir = gr.Text(value=os.path.join(current_path, "SAVAdata", "output"), label=i18n('File Output Path'), interactive=not core.config.server_mode, visible=not core.config.server_mode, max_lines=1)
+                    self.output_dir = gr.Text(value=os.path.join(current_path, "outputs", "output"), label=i18n('File Output Path'), interactive=not core.config.server_mode, visible=not core.config.server_mode, max_lines=1)
                     self.translator = gr.Radio(label=i18n('Select Translator'), choices=[i for i in TRANSLATORS.keys()], value="ollama")
                     Base_args = [self.translation_upload, self.translation_target_language, self.batch_size, self.merge_sub, self.output_dir, self.INTERRUPT_EVENT]
                     with gr.Column():

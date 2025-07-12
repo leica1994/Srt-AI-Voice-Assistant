@@ -66,7 +66,7 @@ def basename_no_ext(path: str):
 
 
 def clear_cache():
-    dir = os.path.join(current_path, "SAVAdata", "temp")
+    dir = os.path.join(current_path, "outputs", "temp")
     if os.path.exists(dir):
         shutil.rmtree(dir)
         logger.info(i18n('Temporary files cleared successfully!'))

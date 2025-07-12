@@ -3,7 +3,7 @@ help_custom = r"""
 ### Please inspect the code content before running it; executing untrusted code may put your computer at risk!
 ### The author bear no responsibility for any consequences!
 
-### Place code files containing Python functions in the SAVAdata/presets directory, and they will be callable.
+### Place code files containing Python functions in the outputs/presets directory, and they will be callable.
 * Here is an example code for Gradio API.
 ```
 def custom_api(text): #return: audio content

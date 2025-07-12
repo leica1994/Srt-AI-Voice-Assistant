@@ -143,17 +143,17 @@ class Subtitles:
     def set_dir_name(self, dir_name: str):
         count = 1
         self.dir = dir_name
-        while os.path.exists(os.path.join(current_path, "SAVAdata", "workspaces", self.dir)):
+        while os.path.exists(os.path.join(current_path, "outputs", "workspaces", self.dir)):
             if core.config.overwrite_workspace:
-                shutil.rmtree(os.path.join(current_path, "SAVAdata", "workspaces", self.dir))
+                shutil.rmtree(os.path.join(current_path, "outputs", "workspaces", self.dir))
                 break
             self.dir = f"{dir_name}({count})"
             count+=1
-        os.makedirs(os.path.join(current_path, "SAVAdata", "workspaces", self.dir), exist_ok=True)
+        os.makedirs(os.path.join(current_path, "outputs", "workspaces", self.dir), exist_ok=True)
         self.dump()
 
     def get_abs_dir(self):
-        return os.path.join(current_path, "SAVAdata", "workspaces", self.dir)
+        return os.path.join(current_path, "outputs", "workspaces", self.dir)
 
     def audio_join(self, sr=None):  # -> tuple[int,np.array]
         assert self.dir is not None
@@ -218,7 +218,7 @@ class Subtitles:
             print(f"🔄 使用现有输出目录: {output_dir}")
         else:
             # 生成新的基于workspace名称的目录
-            output_dir = os.path.join(current_path, "SAVAdata", "output", project_name)
+            output_dir = os.path.join(current_path, "outputs", "output", project_name)
             os.makedirs(output_dir, exist_ok=True)
 
             # 保存输出目录到环境变量，供后续使用
@@ -226,7 +226,7 @@ class Subtitles:
             print(f"🆕 创建新输出目录: {output_dir}")
 
         # 同时创建对应的temp/audio_processing目录
-        audio_processing_dir = os.path.join(current_path, "SAVAdata", "temp", "audio_processing", project_name)
+        audio_processing_dir = os.path.join(current_path, "outputs", "temp", "audio_processing", project_name)
         os.makedirs(audio_processing_dir, exist_ok=True)
         print(f"📁 创建音频处理目录: {audio_processing_dir}")
 
@@ -305,7 +305,7 @@ class Subtitles:
             # 生成基于workspace名称的输出目录
             import datetime
             dir_name = self.dir if self.dir else datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-            output_dir = os.path.join(current_path, "SAVAdata", "output", dir_name)
+            output_dir = os.path.join(current_path, "outputs", "output", dir_name)
             os.makedirs(output_dir, exist_ok=True)
             file_path = os.path.join(output_dir, f"{dir_name}.srt")
         else:

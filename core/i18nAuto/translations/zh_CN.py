@@ -263,7 +263,7 @@ i18n_dict = {
     # WAV2SRT
     "Audio/Video Transcribe": "音视频转字幕",
     "Upload File": "上传文件",
-    "Save Path(Folder Path), Default: SAVAdata\\output": "保存路径，填文件夹名，默认为SAVAdata\\output",
+    "Save Path(Folder Path), Default: outputs\\output": "保存路径，填文件夹名，默认为outputs\\output",
     "Python Interpreter Path, align with GSV by default": "Python解释器路径,默认和GSV一致",
     "Select ASR model. Funasr supports only Chinese(but much more faster) while Faster-Whisper has multi-language support": "选择ASR模型，funasr只支持中文但更快更准，faster whisper支持多语言",
     "(ms)Minimum length of each segment": "(ms)每段最小多长",

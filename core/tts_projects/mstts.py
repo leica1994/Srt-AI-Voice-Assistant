@@ -27,8 +27,8 @@ class MSTTS(TTSProjet):
         super().update_cfg(config)
 
     def getms_speakers(self):
-        # if not os.path.exists(os.path.join(current_path,"SAVAdata", "ms_speaker_info.json")):
-        if not os.path.exists(os.path.join(current_path, "SAVAdata", "ms_speaker_info_raw.json")):
+        # if not os.path.exists(os.path.join(current_path,"outputs", "ms_speaker_info.json")):
+        if not os.path.exists(os.path.join(current_path, "outputs", "ms_speaker_info_raw.json")):
             try:
                 assert self.cfg_ms_key not in [None, ""], i18n('Please fill in your key to get MSTTS speaker list.')
                 headers = {"Ocp-Apim-Subscription-Key": self.cfg_ms_key}
@@ -37,7 +37,7 @@ class MSTTS(TTSProjet):
                 data.raise_for_status()
                 info = json.loads(data.content)
                 with open(
-                    os.path.join(current_path, "SAVAdata", "ms_speaker_info_raw.json"),
+                    os.path.join(current_path, "outputs", "ms_speaker_info_raw.json"),
                     "w",
                     encoding="utf-8",
                 ) as f:
@@ -48,7 +48,7 @@ class MSTTS(TTSProjet):
                 logger.error(err)
                 self.ms_speaker_info = {}
                 return None
-        dataraw = json.load(open(os.path.join(current_path, "SAVAdata", "ms_speaker_info_raw.json"), encoding="utf-8"))  # list
+        dataraw = json.load(open(os.path.join(current_path, "outputs", "ms_speaker_info_raw.json"), encoding="utf-8"))  # list
         classified_info = {}
         # target_language=["zh","ja","en","ko","fr"]
         target_language = re.split(r'(?<=[,，])| ', self.ms_lang_option)
@@ -60,9 +60,9 @@ class MSTTS(TTSProjet):
                 if i["Locale"] not in classified_info:
                     classified_info[i["Locale"]] = {}
                 classified_info[i["Locale"]][i["LocalName"]] = i
-        with open(os.path.join("SAVAdata", "ms_speaker_info.json"), "w", encoding="utf-8") as f:
+        with open(os.path.join("outputs", "ms_speaker_info.json"), "w", encoding="utf-8") as f:
             json.dump(classified_info, f, indent=2, ensure_ascii=False)
-        self.ms_speaker_info = json.load(open(os.path.join("SAVAdata", "ms_speaker_info.json"), encoding="utf-8"))
+        self.ms_speaker_info = json.load(open(os.path.join("outputs", "ms_speaker_info.json"), encoding="utf-8"))
 
     def getms_token(self):
         fetch_token_url = f"https://{self.cfg_ms_region}.api.cognitive.microsoft.com/sts/v1.0/issueToken"

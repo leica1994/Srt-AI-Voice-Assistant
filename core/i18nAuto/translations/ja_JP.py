@@ -230,7 +230,7 @@ i18n_dict = {
         #WAV2SRT
         "Audio/Video Transcribe": "音声/ビデオを字幕に変換",
         "Upload File": "ファイルをアップロード",
-        "Save Path(Folder Path), Default: SAVAdata\\output": "保存パス（フォルダパス）、デフォルト: SAVAdata\\output",
+        "Save Path(Folder Path), Default: outputs\\output": "保存パス（フォルダパス）、デフォルト: outputs\\output",
         "Python Interpreter Path, align with GSV by default": "Pythonインタープリタのパス、デフォルトでGSVと一致",
         "Select ASR model. Funasr supports only Chinese(but much more faster) while Faster-Whisper has multi-language support": "ASRモデルを選択。funasrは中国語のみサポートしますが、はるかに高速です。faster whisperは多言語をサポートしています",
         "(ms)Minimum length of each segment": "(ms)各セグメントの最小長さ",
