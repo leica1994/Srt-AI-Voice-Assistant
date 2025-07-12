@@ -4,7 +4,7 @@ import hashlib
 import gradio as gr
 import os
 import copy
-import Sava_Utils
+import core
 from . import i18n, logger
 from .subtitle import Subtitle, Subtitles
 from .utils import read_file, basename_no_ext
@@ -24,7 +24,7 @@ def merge_subtitles(subtitles_main: Subtitles, subtitles_tr: Subtitles):
     return result
 
 
-def start_translation(in_files, language: str, batch_size: float, merge: bool, output_dir: str, interrupt_flag: Sava_Utils.utils.Flag, *args, translator=None):
+def start_translation(in_files, language: str, batch_size: float, merge: bool, output_dir: str, interrupt_flag: core.utils.Flag, *args, translator=None):
     output_list = []
     message = ""
     if in_files is None:
@@ -44,7 +44,7 @@ def start_translation(in_files, language: str, batch_size: float, merge: bool, o
                     message += f"{os.path.basename(in_file.name)}: {msg}\n"
                 for sub, txt in zip(subtitle_list_tr, result):
                     sub.text = txt
-                if Sava_Utils.config.server_mode:
+                if core.config.server_mode:
                     output_path = os.path.join(os.path.dirname(in_file.name), f"{basename_no_ext(in_file.name)}_translated_to_{language}.srt")
                 else:
                     # 生成带哈希的输出目录
@@ -87,7 +87,7 @@ def merge_uploaded_sub(filelist_sup: list, filelist_inf: list, output_dir: str):
     ret = []
     try:
         for f1, f2 in zip(filelist_sup, filelist_inf):
-            if Sava_Utils.config.server_mode:
+            if core.config.server_mode:
                 output_path = os.path.join(os.path.dirname(f1.name), f"{basename_no_ext(f1.name)}_merged.srt")
             else:
                 output_path = os.path.join(output_dir, f"{basename_no_ext(f1.name)}_merged.srt")
@@ -122,7 +122,7 @@ class Translation_module(Base_Componment):
 
     def _UI(self, file_main):
         with gr.TabItem(i18n('Subtitle Translation')):
-            self.INTERRUPT_EVENT = gr.State(value=Sava_Utils.utils.Flag())
+            self.INTERRUPT_EVENT = gr.State(value=core.utils.Flag())
             with gr.Row():
                 with gr.Column():
                     self.translation_upload = gr.File(label=i18n('Upload your subtitle files (multiple allowed).'), file_count="multiple", file_types=[".srt", ".csv", ".txt"])
@@ -140,7 +140,7 @@ class Translation_module(Base_Componment):
                     self.translation_target_language = gr.Dropdown(label=i18n('Specify Target Language'), choices=LANGUAGE, value=LANGUAGE[1], interactive=True)
                     self.batch_size = gr.Number(label="Batch Size", value=5, minimum=1, interactive=True)
                     self.merge_sub = gr.Checkbox(label=i18n('Generate merged subtitles'), value=False, interactive=True)
-                    self.output_dir = gr.Text(value=os.path.join(current_path, "SAVAdata", "output"), label=i18n('File Output Path'), interactive=not Sava_Utils.config.server_mode, visible=not Sava_Utils.config.server_mode, max_lines=1)
+                    self.output_dir = gr.Text(value=os.path.join(current_path, "SAVAdata", "output"), label=i18n('File Output Path'), interactive=not core.config.server_mode, visible=not core.config.server_mode, max_lines=1)
                     self.translator = gr.Radio(label=i18n('Select Translator'), choices=[i for i in TRANSLATORS.keys()], value="ollama")
                     Base_args = [self.translation_upload, self.translation_target_language, self.batch_size, self.merge_sub, self.output_dir, self.INTERRUPT_EVENT]
                     with gr.Column():

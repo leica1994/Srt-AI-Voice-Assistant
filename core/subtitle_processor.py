@@ -12,7 +12,7 @@
     - 支持多种编码格式
 
 快速使用:
-    from Sava_Utils.subtitle_processor import *
+    from core.subtitle_processor import *
 
     # 1. 多格式转换
     convert_subtitle('input.ass', 'output.srt')

@@ -1,7 +1,7 @@
 import os
 import gradio as gr
 import json
-import Sava_Utils
+import core
 import time
 import os
 import sys
@@ -235,7 +235,7 @@ def restart():
             os.unsetenv("_PYI_APPLICATION_HOME_DIR")
             os.unsetenv("_PYI_ARCHIVE_FILE")
             os.unsetenv("_PYI_PARENT_PROCESS_LEVEL")
-            Sava_Utils.utils.rc_open_window(command=f"{sys.executable}", dir=current_path)
+            core.utils.rc_open_window(command=f"{sys.executable}", dir=current_path)
             os.environ["_PYI_APPLICATION_HOME_DIR"] = a
             os.environ["_PYI_ARCHIVE_FILE"] = b
             os.environ["_PYI_PARENT_PROCESS_LEVEL"] = c
@@ -253,7 +253,7 @@ class Settings_UI:
     def _apply_to_componments(self):
         for item in self.componments.values():
             for i in item:
-                i.update_cfg(config=Sava_Utils.config)
+                i.update_cfg(config=core.config)
 
     def _get_gpu_info(self):
         """获取GPU信息用于UI显示 - 针对16GB显卡优化"""
@@ -284,15 +284,15 @@ class Settings_UI:
             return "GPU信息获取失败"
 
     def save_settngs(self, *args):
-        current_edit_rows = Sava_Utils.config.num_edit_rows
-        Sava_Utils.config = Settings(*args)
-        Sava_Utils.config.save()
+        current_edit_rows = core.config.num_edit_rows
+        core.config = Settings(*args)
+        core.config.save()
         self._apply_to_componments()
-        if Sava_Utils.config.num_edit_rows != current_edit_rows:
-            Sava_Utils.config.num_edit_rows = current_edit_rows
+        if core.config.num_edit_rows != current_edit_rows:
+            core.config.num_edit_rows = current_edit_rows
         logger.info(i18n('Settings saved successfully!'))
         gr.Info(i18n('Settings saved successfully!'))
-        return Sava_Utils.config.to_list()
+        return core.config.to_list()
 
     def getUI(self):
         if not self.ui:
@@ -302,32 +302,32 @@ class Settings_UI:
             raise "ERR"
 
     def _UI(self):
-        if Sava_Utils.config.server_mode:
+        if core.config.server_mode:
             gr.Markdown(i18n('Settings have been disabled!'))
             return []
         gr.Markdown(f"⚠️{i18n('Click Apply & Save for these settings to take effect.')}⚠️")
         with gr.Group():
             gr.Markdown(value=i18n('General'))
-            self.language = gr.Dropdown(label="Language (Requires a restart)", value=Sava_Utils.config.language, allow_custom_value=False, choices=['Auto', "en_US", "zh_CN", "ja_JP", "ko_KR", "fr_FR"])
+            self.language = gr.Dropdown(label="Language (Requires a restart)", value=core.config.language, allow_custom_value=False, choices=['Auto', "en_US", "zh_CN", "ja_JP", "ko_KR", "fr_FR"])
             with gr.Row():
-                self.server_port = gr.Number(label=i18n('The port used by this program, 0=auto. When conflicts prevent startup, use -p parameter to specify the port.'), value=Sava_Utils.config.server_port, minimum=0)
-                self.LAN_access = gr.Checkbox(label=i18n('Enable LAN access. Restart to take effect.'), value=Sava_Utils.config.LAN_access)
+                self.server_port = gr.Number(label=i18n('The port used by this program, 0=auto. When conflicts prevent startup, use -p parameter to specify the port.'), value=core.config.server_port, minimum=0)
+                self.LAN_access = gr.Checkbox(label=i18n('Enable LAN access. Restart to take effect.'), value=core.config.LAN_access)
             with gr.Row():
-                self.overwrite_workspace = gr.Checkbox(label=i18n('Overwrite history records with files of the same name instead of creating a new project.'), value=Sava_Utils.config.overwrite_workspace, interactive=True)
-                self.clear_cache = gr.Checkbox(label=i18n('Clear temporary files on each startup'), value=Sava_Utils.config.clear_tmp, interactive=True)
+                self.overwrite_workspace = gr.Checkbox(label=i18n('Overwrite history records with files of the same name instead of creating a new project.'), value=core.config.overwrite_workspace, interactive=True)
+                self.clear_cache = gr.Checkbox(label=i18n('Clear temporary files on each startup'), value=core.config.clear_tmp, interactive=True)
             with gr.Row():
-                self.concurrency_count = gr.Number(label=i18n('Concurrency Count'), value=Sava_Utils.config.concurrency_count, minimum=2, interactive=True)
-                self.server_mode = gr.Checkbox(label=i18n('Server Mode can only be enabled by modifying configuration file or startup parameters.'), value=Sava_Utils.config.server_mode, interactive=False)
+                self.concurrency_count = gr.Number(label=i18n('Concurrency Count'), value=core.config.concurrency_count, minimum=2, interactive=True)
+                self.server_mode = gr.Checkbox(label=i18n('Server Mode can only be enabled by modifying configuration file or startup parameters.'), value=core.config.server_mode, interactive=False)
             with gr.Column():
                 with gr.Row():
-                    self.min_interval = gr.Slider(label=i18n('Minimum voice interval (seconds)'), minimum=0, maximum=3, value=Sava_Utils.config.min_interval, step=0.1)
-                    self.max_accelerate_ratio = gr.Slider(label=i18n('Maximum audio acceleration ratio (requires ffmpeg)'), minimum=1, maximum=2, value=Sava_Utils.config.max_accelerate_ratio, step=0.01)
+                    self.min_interval = gr.Slider(label=i18n('Minimum voice interval (seconds)'), minimum=0, maximum=3, value=core.config.min_interval, step=0.1)
+                    self.max_accelerate_ratio = gr.Slider(label=i18n('Maximum audio acceleration ratio (requires ffmpeg)'), minimum=1, maximum=2, value=core.config.max_accelerate_ratio, step=0.01)
                 with gr.Row():
                     self.output_sr = gr.Dropdown(label=i18n('Sampling rate of output audio, 0=Auto'), value='0', allow_custom_value=True, choices=['0', '16000', '22050', '24000', '32000', '44100', '48000'])
-                    self.remove_silence = gr.Checkbox(label=i18n('Remove inhalation and silence at the beginning and the end of the audio'), value=Sava_Utils.config.remove_silence, interactive=True)
+                    self.remove_silence = gr.Checkbox(label=i18n('Remove inhalation and silence at the beginning and the end of the audio'), value=core.config.remove_silence, interactive=True)
                 with gr.Row():
-                    self.num_edit_rows = gr.Number(label=i18n('Edit Panel Row Count (Requires a restart)'), minimum=1, maximum=50, value=Sava_Utils.config.num_edit_rows)
-                    self.export_spk_pattern = gr.Text(label=i18n('Export subtitles with speaker name. Fill in your template to enable.'), placeholder=r"{#NAME}: {#TEXT}", value=Sava_Utils.config.export_spk_pattern)
+                    self.num_edit_rows = gr.Number(label=i18n('Edit Panel Row Count (Requires a restart)'), minimum=1, maximum=50, value=core.config.num_edit_rows)
+                    self.export_spk_pattern = gr.Text(label=i18n('Export subtitles with speaker name. Fill in your template to enable.'), placeholder=r"{#NAME}: {#TEXT}", value=core.config.export_spk_pattern)
 
             # 音频处理优化设置
             with gr.Group():
@@ -335,28 +335,28 @@ class Settings_UI:
                 with gr.Row():
                     self.auto_quality_adjustment = gr.Checkbox(
                         label="智能质量调整",
-                        value=Sava_Utils.config.auto_quality_adjustment,
+                        value=core.config.auto_quality_adjustment,
                         info="自动根据文件大小调整音频质量，优化大文件处理速度"
                     )
                     # 获取GPU信息用于显示
                     gpu_info = self._get_gpu_info()
                     self.max_gpu_memory_gb = gr.Number(
                         label="GPU显存限制(GB)",
-                        value=Sava_Utils.config.max_gpu_memory_gb,
+                        value=core.config.max_gpu_memory_gb,
                         minimum=2.0,
                         maximum=24.0,
                         step=0.5,
                         info=f"限制GPU显存使用，避免大文件处理时内存溢出。{gpu_info}"
                     )
 
-            self.theme = gr.Dropdown(choices=gradio_hf_hub_themes, value=Sava_Utils.config.theme, label=i18n('Theme (Requires a restart)'), interactive=True, allow_custom_value=True)
+            self.theme = gr.Dropdown(choices=gradio_hf_hub_themes, value=core.config.theme, label=i18n('Theme (Requires a restart)'), interactive=True, allow_custom_value=True)
         
         with gr.Accordion(i18n('Storage Management'),open=False):
             self.clear_cache_btn = gr.Button(value=i18n('Clear temporary files'), variant="primary")
-            self.clear_cache_btn.click(Sava_Utils.utils.clear_cache, inputs=[], outputs=[])
+            self.clear_cache_btn.click(core.utils.clear_cache, inputs=[], outputs=[])
             self.workspaces_archieves_state = gr.State(value=list())
             self.list_workspaces_btn = gr.Button(value=i18n('List Archives'), variant="primary")
-            self.list_workspaces_btn.click(Sava_Utils.edit_panel.refworklist, outputs=[self.workspaces_archieves_state])
+            self.list_workspaces_btn.click(core.edit_panel.refworklist, outputs=[self.workspaces_archieves_state])
             workspaces_manager_ui_empty_md = f"### <center>{i18n('No Archives Found. Click the <List Archives> button to refresh.')}</center>"
 
             @gr.render(inputs=self.workspaces_archieves_state)
@@ -374,19 +374,19 @@ class Settings_UI:
         with gr.Accordion(i18n('Submodule Settings'),open=False):
             with gr.Group():
                 gr.Markdown(value="Index-TTS")
-                self.indextts_pydir_input = gr.Textbox(label=i18n('Python Interpreter Path for Index-TTS'), interactive=True, value=Sava_Utils.config.indextts_pydir)
-                self.indextts_dir_input = gr.Textbox(label=i18n('Root Path of Index-TTS'), interactive=True, value=Sava_Utils.config.indextts_dir)
-                self.indextts_args = gr.Textbox(label=i18n('Start Parameters'), interactive=True, value=Sava_Utils.config.indextts_args)
-                self.indextts_script = gr.Textbox(label="启动脚本", interactive=True, value=Sava_Utils.config.indextts_script, info="可选：指定启动脚本路径或命令，如果填入则直接执行此脚本/命令")
+                self.indextts_pydir_input = gr.Textbox(label=i18n('Python Interpreter Path for Index-TTS'), interactive=True, value=core.config.indextts_pydir)
+                self.indextts_dir_input = gr.Textbox(label=i18n('Root Path of Index-TTS'), interactive=True, value=core.config.indextts_dir)
+                self.indextts_args = gr.Textbox(label=i18n('Start Parameters'), interactive=True, value=core.config.indextts_args)
+                self.indextts_script = gr.Textbox(label="启动脚本", interactive=True, value=core.config.indextts_script, info="可选：指定启动脚本路径或命令，如果填入则直接执行此脚本/命令")
             with gr.Group():
                 gr.Markdown(value="GSV")
                 self.gsv_fallback = gr.Checkbox(value=False, label=i18n('Downgrade API version to v1'), interactive=True)
-                self.gsv_pydir_input = gr.Textbox(label=i18n('Python Interpreter Path for GSV'), interactive=True, value=Sava_Utils.config.gsv_pydir)
-                self.gsv_dir_input = gr.Textbox(label=i18n('Root Path of GSV'), interactive=True, value=Sava_Utils.config.gsv_dir)
-                self.gsv_args = gr.Textbox(label=i18n('Start Parameters'), interactive=True, value=Sava_Utils.config.gsv_args)
+                self.gsv_pydir_input = gr.Textbox(label=i18n('Python Interpreter Path for GSV'), interactive=True, value=core.config.gsv_pydir)
+                self.gsv_dir_input = gr.Textbox(label=i18n('Root Path of GSV'), interactive=True, value=core.config.gsv_dir)
+                self.gsv_args = gr.Textbox(label=i18n('Start Parameters'), interactive=True, value=core.config.gsv_args)
             with gr.Group():
                 gr.Markdown(value=i18n('Translation Module'))
-                self.ollama_url = gr.Textbox(label=i18n('Default Request Address for Ollama'), interactive=True, value=Sava_Utils.config.ollama_url)
+                self.ollama_url = gr.Textbox(label=i18n('Default Request Address for Ollama'), interactive=True, value=core.config.ollama_url)
 
         self.save_settings_btn = gr.Button(value=i18n('Apply & Save'), variant="primary")
         self.restart_btn = gr.Button(value=i18n('Restart UI'), variant="stop")

@@ -7,7 +7,7 @@ import soundfile as sf
 import datetime
 import pickle
 import shutil
-import Sava_Utils
+import core
 import copy
 from . import logger, i18n
 from .librosa_load import load_audio
@@ -144,7 +144,7 @@ class Subtitles:
         count = 1
         self.dir = dir_name
         while os.path.exists(os.path.join(current_path, "SAVAdata", "workspaces", self.dir)):
-            if Sava_Utils.config.overwrite_workspace:
+            if core.config.overwrite_workspace:
                 shutil.rmtree(os.path.join(current_path, "SAVAdata", "workspaces", self.dir))
                 break
             self.dir = f"{dir_name}({count})"
@@ -168,7 +168,7 @@ class Subtitles:
         if sr in [None, 0]:
             wav, sr = load_audio(os.path.join(abs_path, fl[0]), sr=sr)
         self.sr = sr
-        interval = int(Sava_Utils.config.min_interval * sr)
+        interval = int(core.config.min_interval * sr)
         del fl
         ptr = 0
         for id, i in enumerate(self.subtitles):
@@ -296,8 +296,8 @@ class Subtitles:
                 end = to_time(i.real_et / self.sr)
             srt_content.append(str(idx) + "\n")
             srt_content.append(f"{start} --> {end}" + "\n")
-            if Sava_Utils.config.export_spk_pattern and i.speaker:
-                srt_content.append(Sava_Utils.config.export_spk_pattern.replace(r"{#NAME}", i.speaker).replace(r"{#TEXT}", i.text.strip()) + "\n")
+            if core.config.export_spk_pattern and i.speaker:
+                srt_content.append(core.config.export_spk_pattern.replace(r"{#NAME}", i.speaker).replace(r"{#TEXT}", i.text.strip()) + "\n")
             else:
                 srt_content.append(i.text + "\n")
             srt_content.append("\n")
@@ -313,6 +313,6 @@ class Subtitles:
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, "w", encoding="utf-8") as f:
             f.writelines(srt_content)
-        if open_explorer and not Sava_Utils.config.server_mode:
+        if open_explorer and not core.config.server_mode:
             os.system(f'explorer /select, {file_path}')
         return file_path

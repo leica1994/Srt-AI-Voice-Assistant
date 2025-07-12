@@ -16,7 +16,7 @@ from .librosa_load import get_rms
 from .subtitle_processor import format_ass_file, extract_ass_to_srt, get_available_styles, convert_subtitle
 from .subtitle import Subtitles, Subtitle
 from .edit_panel import getworklist, load_page
-import Sava_Utils
+import core
 
 
 current_path = os.environ.get("current_path")
@@ -340,7 +340,7 @@ def modify_spkmap(map: dict, k: str, v: str):
 
 
 def read_file(file_name, fps=30, offset=0):
-    if Sava_Utils.config.server_mode:
+    if core.config.server_mode:
         assert os.stat(file_name).st_size < 65536, i18n('Error: File too large')  # 64KB
 
     file_ext = file_name[-4:].lower()
