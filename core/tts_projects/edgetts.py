@@ -21,8 +21,39 @@ class EdgeTTS(TTSProjet):
         self.voice_list = []
         self.language_map = self._get_language_map()
         self.voice_name_map = self._get_voice_name_map()
+        self.config_file = os.path.join(current_path, "outputs", "edgetts_config.json")
         super().__init__("edgetts", config)
         self.load_voices()
+
+    def _save_config(self, config):
+        """保存配置"""
+        try:
+            import json
+            os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"保存EdgeTTS配置失败: {e}")
+
+    def _load_config(self):
+        """加载配置"""
+        try:
+            import json
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.error(f"加载EdgeTTS配置失败: {e}")
+        return self._get_default_config()
+
+    def _get_default_config(self):
+        """获取默认配置"""
+        return {
+            "language": "zh-CN",
+            "speaker": "zh-CN-XiaoxiaoNeural",
+            "rate": 1.0,
+            "pitch": 1.0
+        }
 
     def _get_language_map(self):
         """语言代码映射（保持原始显示）"""
@@ -265,6 +296,9 @@ class EdgeTTS(TTSProjet):
 
     def _UI(self):
         """创建 Edge-TTS 的 UI 界面"""
+        # 加载保存的配置
+        saved_config = self._load_config()
+
         with gr.TabItem("🎤 Edge-TTS"):
             with gr.Column():
 
@@ -309,8 +343,12 @@ class EdgeTTS(TTSProjet):
                 else:
                     # 语言选择
                     language_choices = list(self.edge_voices.keys())
-                    # 优先选择 zh-CN，然后是其他中文语言，最后是其他语言
-                    if 'zh-CN' in language_choices:
+                    # 使用保存的配置，如果没有则使用默认值
+                    saved_language = saved_config.get("language", "zh-CN")
+                    # 优先选择保存的语言，然后是 zh-CN，最后是其他语言
+                    if saved_language in language_choices:
+                        default_language = saved_language
+                    elif 'zh-CN' in language_choices:
                         default_language = 'zh-CN'
                     else:
                         default_language = next((lang for lang in language_choices if 'zh' in lang.lower()),
@@ -327,7 +365,12 @@ class EdgeTTS(TTSProjet):
                     # 语音选择
                     if default_language and default_language in self.edge_voices:
                         speaker_choices = list(self.edge_voices[default_language].keys())
-                        default_speaker = speaker_choices[0] if speaker_choices else None
+                        # 使用保存的语音，如果没有则使用第一个
+                        saved_speaker = saved_config.get("speaker", "")
+                        if saved_speaker in speaker_choices:
+                            default_speaker = saved_speaker
+                        else:
+                            default_speaker = speaker_choices[0] if speaker_choices else None
                     else:
                         speaker_choices = []
                         default_speaker = None
@@ -364,7 +407,7 @@ class EdgeTTS(TTSProjet):
                                 minimum=0.5,
                                 maximum=2.0,
                                 step=0.1,
-                                value=1.0,
+                                value=saved_config.get("rate", 1.0),
                                 label="语速",
                                 info="控制语音播放速度"
                             )
@@ -372,7 +415,7 @@ class EdgeTTS(TTSProjet):
                                 minimum=0.5,
                                 maximum=1.5,
                                 step=0.1,
-                                value=1.0,
+                                value=saved_config.get("pitch", 1.0),
                                 label="音调",
                                 info="控制语音音调高低"
                             )
@@ -418,7 +461,36 @@ class EdgeTTS(TTSProjet):
                     self.edge_pitch
                 ]
 
+                # 添加参数记忆功能 - 当任何参数改变时保存配置
+                config_inputs = [
+                    self.edge_language,
+                    self.edge_speaker,
+                    self.edge_rate,
+                    self.edge_pitch
+                ]
+
+                # 为每个配置项绑定保存事件
+                for component in config_inputs:
+                    component.change(
+                        fn=lambda *args: self._save_current_config(*args),
+                        inputs=config_inputs,
+                        outputs=[]
+                    )
+
         return EDGETTS_ARGS
+
+    def _save_current_config(self, *args):
+        """保存当前配置"""
+        try:
+            config = {
+                "language": args[0],
+                "speaker": args[1],
+                "rate": args[2],
+                "pitch": args[3]
+            }
+            self._save_config(config)
+        except Exception as e:
+            logger.error(f"保存EdgeTTS配置时出错: {e}")
 
     def update_speakers(self, language):
         """更新语音选择列表"""

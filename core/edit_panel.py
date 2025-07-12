@@ -19,11 +19,11 @@ def load_page(subtitle_list, target_index=1):
     return gr.update(minimum=1, maximum=length if length > 0 else 1, interactive=True, value=value), *show_page(value, subtitle_list)
 
 BTN_VISIBLE_DICT = {
-    # 按钮顺序：gsvregenbtn, edgettsregenbtn, indexttsregenbtn, customregenbtn
-    "gsv": [gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False)],
-    "edgetts": [gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)],
-    "indextts": [gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)],
-    "custom": [gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True)],
+    # 按钮顺序：gpt_sovitsregenbtn, cosyvoice2regenbtn, edgettsregenbtn, indexttsregenbtn
+    "gpt_sovits": [gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False)],
+    "cosyvoice2": [gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)],
+    "edgetts": [gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)],
+    "indextts": [gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True)],
     None: [gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False)],
 }
 
